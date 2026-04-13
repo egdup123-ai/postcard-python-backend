@@ -1513,19 +1513,50 @@ TO_PROPERTY_NAMES = {
 
 PROPERTY_CONTAINER_KEYS = (
     "properties",
+    "line_item_properties",
+    "lineItemProperties",
     "custom_attributes",
     "customAttributes",
     "note_attributes",
     "noteAttributes",
     "attributes",
+    "cart_attributes",
+    "cartAttributes",
 )
+
+
+def extract_property_key(raw_value):
+    if not isinstance(raw_value, dict):
+        return ""
+
+    for key_name in ("name", "key", "property", "title", "label"):
+        value = str(raw_value.get(key_name, "") or "").strip()
+        if value:
+            return value
+
+    return ""
+
+
+def extract_property_value(raw_value):
+    if not isinstance(raw_value, dict):
+        return ""
+
+    for value_key in ("value", "text", "content"):
+        value = raw_value.get(value_key, "")
+        if value is not None:
+            normalized = str(value).strip()
+            if normalized:
+                return normalized
+
+    return ""
 
 
 def iter_named_values(raw_values):
     if isinstance(raw_values, dict):
-        if "value" in raw_values and ("name" in raw_values or "key" in raw_values):
-            key_name = raw_values.get("name", raw_values.get("key", ""))
-            yield str(key_name or "").strip(), str(raw_values.get("value", "") or "").strip()
+        key_name = extract_property_key(raw_values)
+        prop_value = extract_property_value(raw_values)
+        if key_name and prop_value:
+            yield key_name, prop_value
             return
 
         for key, value in raw_values.items():
@@ -1534,8 +1565,10 @@ def iter_named_values(raw_values):
 
     for item in raw_values or []:
         if isinstance(item, dict):
-            key_name = item.get("name", item.get("key", ""))
-            yield str(key_name or "").strip(), str(item.get("value", "") or "").strip()
+            key_name = extract_property_key(item)
+            prop_value = extract_property_value(item)
+            if key_name and prop_value:
+                yield key_name, prop_value
 
 
 def extract_named_values(item, container_keys=PROPERTY_CONTAINER_KEYS):
