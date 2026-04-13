@@ -431,6 +431,77 @@ VIEW_HTML = r"""
       color: rgba(72, 91, 101, 0.8);
     }
 
+    .story-journey {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .story-stop {
+      min-width: 0;
+      padding: 12px 14px 13px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(251,244,235,0.82));
+      border: 1px solid rgba(255,255,255,0.92);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.84),
+        0 14px 28px rgba(95, 115, 125, 0.08);
+      text-align: left;
+    }
+
+    .story-stop-label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(112, 123, 129, 0.76);
+    }
+
+    .story-stop-name {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: clamp(22px, 2.6vw, 30px);
+      line-height: 1;
+      color: rgba(47, 36, 39, 0.96);
+      letter-spacing: 0.015em;
+    }
+
+    .story-route-seal {
+      display: inline-grid;
+      place-items: center;
+      gap: 4px;
+      width: 58px;
+      height: 58px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle at 35% 35%, rgba(255,255,255,0.98), rgba(245,232,210,0.94) 48%, rgba(221, 194, 149, 0.86) 100%);
+      border: 1px solid rgba(255,255,255,0.92);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.82),
+        0 12px 24px rgba(120, 97, 63, 0.12);
+      color: rgba(95, 74, 42, 0.82);
+      text-transform: uppercase;
+    }
+
+    .story-route-seal strong {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      line-height: 1;
+    }
+
+    .story-route-seal span {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 20px;
+      line-height: 1;
+    }
+
     body.reveal-active .story-panel,
     body.is-ready .story-panel {
       opacity: 1;
@@ -990,6 +1061,19 @@ VIEW_HTML = r"""
         padding: 14px 16px;
       }
 
+      .story-journey {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .story-route-seal {
+        width: 100%;
+        height: auto;
+        padding: 8px 14px;
+        grid-auto-flow: column;
+        justify-content: center;
+      }
+
       .brand-mark {
         top: 10px;
         min-width: min(56vw, 220px);
@@ -1095,6 +1179,8 @@ VIEW_HTML = r"""
   </style>
 </head>
 <body>
+  {% set sender_name = postcard['from_name']|default('', true)|trim %}
+  {% set recipient_name = postcard['to_name']|default('', true)|trim %}
   <div class="sun-glow"></div>
   <div class="sun-rays"></div>
   <div class="sea-haze"></div>
@@ -1110,6 +1196,25 @@ VIEW_HTML = r"""
       <img src="/static/send-a-memory-logo.png" alt="Send a Memory" id="brandLogo">
       <span class="brand-mark-fallback">Send a Memory</span>
     </div>
+    <section class="story-panel" aria-label="Postcard journey details">
+      <div class="story-panel-eyebrow">Split, Croatia</div>
+      <div class="story-panel-title">A memory carried by sun and sea</div>
+      <p class="story-panel-copy">Opened like a holiday keepsake and addressed like a real postcard from the coast.</p>
+      <div class="story-journey">
+        <div class="story-stop">
+          <span class="story-stop-label">From</span>
+          <span class="story-stop-name">{{ sender_name or 'A traveler' }}</span>
+        </div>
+        <div class="story-route-seal" aria-hidden="true">
+          <strong>Route</strong>
+          <span>to</span>
+        </div>
+        <div class="story-stop">
+          <span class="story-stop-label">To</span>
+          <span class="story-stop-name">{{ recipient_name or 'Someone special' }}</span>
+        </div>
+      </div>
+    </section>
     <section class="scene" aria-label="Digital postcard reveal scene">
       <div class="reveal-halo"></div>
       <div class="reveal-flash"></div>
