@@ -1481,19 +1481,66 @@ TO_PROPERTY_NAMES = {
     "recipient name",
 }
 
+PROPERTY_CONTAINER_KEYS = (
+    "properties",
+    "custom_attributes",
+    "customAttributes",
+    "note_attributes",
+    "noteAttributes",
+    "attributes",
+)
 
-def extract_line_item_properties(item):
-    raw_properties = item.get("properties", [])
 
-    if isinstance(raw_properties, dict):
-        iterable = raw_properties.items()
-        for key, value in iterable:
+def iter_named_values(raw_values):
+    if isinstance(raw_values, dict):
+        if "value" in raw_values and ("name" in raw_values or "key" in raw_values):
+            key_name = raw_values.get("name", raw_values.get("key", ""))
+            yield str(key_name or "").strip(), str(raw_values.get("value", "") or "").strip()
+            return
+
+        for key, value in raw_values.items():
             yield str(key or "").strip(), str(value or "").strip()
         return
 
-    for prop in raw_properties or []:
-        if isinstance(prop, dict):
-            yield str(prop.get("name", "")).strip(), str(prop.get("value", "")).strip()
+    for item in raw_values or []:
+        if isinstance(item, dict):
+            key_name = item.get("name", item.get("key", ""))
+            yield str(key_name or "").strip(), str(item.get("value", "") or "").strip()
+
+
+def extract_named_values(item, container_keys=PROPERTY_CONTAINER_KEYS):
+    for container_key in container_keys:
+        if container_key not in item:
+            continue
+
+        raw_values = item.get(container_key)
+        yield from iter_named_values(raw_values)
+
+
+def extract_line_item_properties(item):
+    yield from extract_named_values(item, ("properties", "custom_attributes", "customAttributes"))
+
+
+def pick_property_values(named_values):
+    message = ""
+    from_name = ""
+    to_name = ""
+
+    for prop_name, prop_value in named_values:
+        normalized_prop_name = normalize_property_name(prop_name)
+
+        if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
+            message = prop_value
+        elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
+            from_name = prop_value
+        elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
+            to_name = prop_value
+
+    return {
+        "message": message,
+        "from_name": from_name,
+        "to_name": to_name,
+    }
 
 
 def normalize_property_name(prop_name: str) -> str:
@@ -1585,21 +1632,14 @@ def build_preferred_postcard_slug(details) -> str:
 def extract_postcard_details(payload):
     order_id = normalize_shopify_order_id(payload.get("id", ""))
     order_name = str(payload.get("name", "")).strip()
+    order_level_values = pick_property_values(extract_named_values(payload, ("note_attributes", "noteAttributes", "attributes", "custom_attributes", "customAttributes")))
 
     for item in payload.get("line_items", []):
         product_title = str(item.get("title", "")).strip()
-        message = ""
-        from_name = ""
-        to_name = ""
-
-        for prop_name, prop_value in extract_line_item_properties(item):
-            normalized_prop_name = normalize_property_name(prop_name)
-            if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
-                message = prop_value
-            elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
-                from_name = prop_value
-            elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
-                to_name = prop_value
+        item_values = pick_property_values(extract_line_item_properties(item))
+        message = item_values["message"]
+        from_name = item_values["from_name"] or order_level_values["from_name"]
+        to_name = item_values["to_name"] or order_level_values["to_name"]
 
         if message:
             return {
