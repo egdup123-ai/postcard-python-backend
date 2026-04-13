@@ -1347,14 +1347,44 @@ def ensure_db():
             slug TEXT UNIQUE NOT NULL,
             product_title TEXT NOT NULL,
             message TEXT NOT NULL,
+            from_name TEXT NOT NULL DEFAULT '',
+            to_name TEXT NOT NULL DEFAULT '',
             front_image_url TEXT NOT NULL,
             back_image_url TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
         """
     )
+    existing_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(postcards)").fetchall()
+    }
+    if "from_name" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN from_name TEXT NOT NULL DEFAULT ''")
+    if "to_name" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN to_name TEXT NOT NULL DEFAULT ''")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webhook_debug_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            order_id TEXT,
+            order_name TEXT,
+            order_property_keys TEXT NOT NULL DEFAULT '[]',
+            line_item_property_keys TEXT NOT NULL DEFAULT '[]',
+            extracted_message_length INTEGER NOT NULL DEFAULT 0,
+            extracted_from_length INTEGER NOT NULL DEFAULT 0,
+            extracted_to_length INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_webhook_debug_events_created_at ON webhook_debug_events(created_at)"
     )
     conn.commit()
     conn.close()
@@ -1718,6 +1748,8 @@ def insert_postcard(details, template):
                     slug = ?,
                     product_title = ?,
                     message = ?,
+                    from_name = ?,
+                    to_name = ?,
                     front_image_url = ?,
                     back_image_url = ?
                 WHERE id = ?
@@ -1728,6 +1760,8 @@ def insert_postcard(details, template):
                     next_slug,
                     details["product_title"],
                     details["message"],
+                    details["from_name"],
+                    details["to_name"],
                     template["front"],
                     template["back"],
                     existing["id"],
@@ -1745,11 +1779,13 @@ def insert_postcard(details, template):
             slug,
             product_title,
             message,
+            from_name,
+            to_name,
             front_image_url,
             back_image_url,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             details["order_id"],
@@ -1757,6 +1793,8 @@ def insert_postcard(details, template):
             slug,
             details["product_title"],
             details["message"],
+            details["from_name"],
+            details["to_name"],
             template["front"],
             template["back"],
             utc_now_iso(),
@@ -1767,6 +1805,60 @@ def insert_postcard(details, template):
 
 
 ensure_db()
+
+
+def log_webhook_debug_event(topic, payload, details):
+    db = get_db()
+    order_property_keys = []
+    for prop_name, _ in extract_named_values(payload, ("note_attributes", "noteAttributes", "attributes", "custom_attributes", "customAttributes")):
+        if prop_name and prop_name not in order_property_keys:
+            order_property_keys.append(prop_name)
+
+    line_item_property_keys = []
+    for item in payload.get("line_items", []):
+        for prop_name, _ in extract_line_item_properties(item):
+            if prop_name and prop_name not in line_item_property_keys:
+                line_item_property_keys.append(prop_name)
+
+    db.execute(
+        """
+        INSERT INTO webhook_debug_events (
+            created_at,
+            topic,
+            order_id,
+            order_name,
+            order_property_keys,
+            line_item_property_keys,
+            extracted_message_length,
+            extracted_from_length,
+            extracted_to_length
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            utc_now_iso(),
+            str(topic or ""),
+            details.get("order_id", ""),
+            details.get("order_name", ""),
+            json.dumps(order_property_keys, ensure_ascii=True),
+            json.dumps(line_item_property_keys, ensure_ascii=True),
+            len(str(details.get("message", "") or "")),
+            len(str(details.get("from_name", "") or "")),
+            len(str(details.get("to_name", "") or "")),
+        ),
+    )
+    db.execute(
+        """
+        DELETE FROM webhook_debug_events
+        WHERE id NOT IN (
+            SELECT id
+            FROM webhook_debug_events
+            ORDER BY id DESC
+            LIMIT 50
+        )
+        """
+    )
+    db.commit()
 
 
 @app.route("/")
@@ -1788,6 +1880,7 @@ def process_shopify_order_webhook():
         for prop_name, _prop_value in extract_line_item_properties(item):
             if prop_name and prop_name not in property_names:
                 property_names.append(prop_name)
+    log_webhook_debug_event(source_topic, payload, details)
     print(json.dumps({
         "event": "shopify_order_webhook",
         "topic": source_topic,
@@ -1959,7 +2052,7 @@ def debug_postcards():
 
     rows = db.execute(
         f"""
-        SELECT id, order_id, order_name, product_title, slug, created_at
+        SELECT id, order_id, order_name, product_title, slug, from_name, to_name, created_at
         FROM postcards
         {where_sql}
         ORDER BY id DESC
@@ -1971,6 +2064,43 @@ def debug_postcards():
     return jsonify({
         "count": len(rows),
         "rows": [dict(row) for row in rows],
+    }), 200
+
+
+@app.route("/api/debug/webhooks", methods=["GET"])
+def debug_webhooks():
+    limit = max(1, min(int(request.args.get("limit", "10")), 50))
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT
+            id,
+            created_at,
+            topic,
+            order_id,
+            order_name,
+            order_property_keys,
+            line_item_property_keys,
+            extracted_message_length,
+            extracted_from_length,
+            extracted_to_length
+        FROM webhook_debug_events
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+    return jsonify({
+        "count": len(rows),
+        "rows": [
+            {
+                **dict(row),
+                "order_property_keys": json.loads(row["order_property_keys"] or "[]"),
+                "line_item_property_keys": json.loads(row["line_item_property_keys"] or "[]"),
+            }
+            for row in rows
+        ],
     }), 200
 
 
