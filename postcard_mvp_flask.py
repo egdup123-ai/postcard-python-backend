@@ -9,6 +9,7 @@ import re
 
 app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
+PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
 
 TEMPLATES = {
     "Riva": {
@@ -59,7 +60,6 @@ VIEW_HTML = r"""
       --bg-bottom: #e7ddd6;
       --ink: #2f2427;
       --muted: rgba(47, 36, 39, 0.58);
-      --line: rgba(65, 105, 124, 0.14);
       --card-radius: 30px;
       --card-shadow: 0 38px 96px rgba(64, 94, 108, 0.16);
       --card-shadow-strong: 0 58px 140px rgba(44, 72, 89, 0.16);
@@ -462,24 +462,24 @@ VIEW_HTML = r"""
     .scene::after {
       content: "";
       position: absolute;
-      inset: 10% 16% 20%;
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(255, 243, 220, 0.72), rgba(255,255,255,0) 66%);
-      filter: blur(38px);
-      opacity: 0.72;
-      transform: translateY(6px) scale(0.94);
-      transition: opacity 0.9s ease, transform 1s var(--ease-soft);
+      inset: -4.5% -5.5%;
+      border-radius: 42px;
+      background: none;
+      border: 1px solid rgba(255, 247, 233, 0.42);
+      box-shadow:
+        0 18px 46px rgba(92, 75, 51, 0.09),
+        0 0 0 10px rgba(255, 250, 242, 0.12);
+      filter: blur(14px);
+      opacity: 0.42;
+      transform: translateY(10px) scale(0.985);
+      transition: opacity 1.1s ease, transform 1.1s var(--ease), box-shadow 1.1s ease;
       pointer-events: none;
     }
 
+    body.reveal-active .scene::after,
     body.is-ready .scene::after {
-      opacity: 0.82;
+      opacity: 0.62;
       transform: translateY(0) scale(1);
-    }
-
-    body.is-open .scene::after {
-      opacity: 1;
-      transform: translateY(-4px) scale(1.03);
     }
 
     .reveal-halo,
@@ -596,10 +596,13 @@ VIEW_HTML = r"""
       width: 100%;
       height: 100%;
       opacity: 0;
-      filter: blur(10px);
-      transform: translate3d(0, 22px, 0) scale(0.975);
+      filter: blur(16px);
+      transform:
+        translate3d(0, 72px, -90px)
+        scale(0.9)
+        rotateX(12deg);
       transform-style: preserve-3d;
-      transition: opacity 0.8s ease, filter 0.8s ease, transform 1s var(--ease-soft), box-shadow 0.9s ease;
+      transition: opacity 1.2s ease, filter 1.25s ease, transform 1.75s var(--ease), box-shadow 1s ease;
       will-change: transform;
     }
 
@@ -615,22 +618,37 @@ VIEW_HTML = r"""
       pointer-events: none;
     }
 
+    body.reveal-start .postcard-shell {
+      opacity: 0.54;
+      filter: blur(8px);
+      transform:
+        translate3d(0, 24px, -26px)
+        scale(0.96)
+        rotateX(5deg);
+    }
+
+    body.reveal-active .postcard-shell {
+      opacity: 1;
+      filter: blur(0);
+      transform:
+        translate3d(0, -8px, 0)
+        scale(1.018)
+        rotateX(0deg);
+    }
+
+    body.reveal-active .postcard-shell::before,
     body.is-ready .postcard-shell::before {
-      opacity: 0.72;
+      opacity: 1;
     }
 
     body.is-ready .postcard-shell {
       opacity: 1;
       filter: blur(0);
-      transform: translate3d(0, 10px, 0) scale(0.985);
-    }
-
-    body.is-open .postcard-shell {
       transform:
-        translate3d(var(--drift-x), calc(var(--drift-y) * 0.28 - 10px), 0)
+        translate3d(var(--drift-x), calc(var(--drift-y) * 0.45), 0)
         scale(1.01)
-        rotateX(calc(var(--tilt-x) * 0.25))
-        rotateY(calc(var(--tilt-y) * 0.25));
+        rotateX(var(--tilt-x))
+        rotateY(var(--tilt-y));
       animation: postcardFloat 6.8s ease-in-out infinite;
     }
 
@@ -655,23 +673,42 @@ VIEW_HTML = r"""
 
     .card-glow {
       position: absolute;
-      inset: -22px;
+      inset: -18px;
       border-radius: calc(var(--card-radius) + 18px);
-      background:
-        radial-gradient(circle at 50% 48%, rgba(255, 239, 205, 0.44), rgba(255,255,255,0) 52%),
-        linear-gradient(135deg, rgba(255,255,255,0.66), rgba(243, 228, 202, 0.2) 34%, rgba(183, 164, 139, 0.08) 62%, transparent 78%);
-      filter: blur(20px);
-      opacity: 0.92;
+      background: none;
+      box-shadow:
+        0 0 0 1px rgba(255, 244, 221, 0.24),
+        0 18px 42px rgba(96, 79, 54, 0.12),
+        0 0 28px rgba(239, 220, 183, 0.14);
+      filter: blur(10px);
+      opacity: 0.74;
       transform: translateZ(-8px);
+      transition: opacity 0.55s ease, filter 0.55s ease, transform 0.8s ease;
     }
 
     .card-glow::before {
       content: "";
       position: absolute;
       inset: 8px;
-      border-radius: calc(var(--card-radius) + 4px);
-      border: 1px solid rgba(255, 243, 218, 0.46);
-      opacity: 0.72;
+      border-radius: calc(var(--card-radius) + 6px);
+      border: 1px solid rgba(255, 244, 221, 0.44);
+      opacity: 0.62;
+    }
+
+    .card-glow::after {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: calc(var(--card-radius) + 14px);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.14),
+        0 22px 54px rgba(102, 86, 58, 0.06);
+      opacity: 0.82;
+    }
+
+    .flip-target:hover .card-glow {
+      opacity: 0.86;
+      filter: blur(12px);
     }
 
     .postcard {
@@ -679,7 +716,7 @@ VIEW_HTML = r"""
       width: 100%;
       height: 100%;
       transform-style: preserve-3d;
-      transition: transform 1s var(--ease-soft);
+      transition: transform 1.06s var(--ease);
       will-change: transform;
     }
 
@@ -695,11 +732,10 @@ VIEW_HTML = r"""
       z-index: 3;
     }
 
-    body.is-open .postcard::after {
-      animation: postcardGleam 1.05s var(--ease-soft) 0.14s forwards;
+    body.reveal-active .postcard::after {
+      animation: postcardGleam 1.45s var(--ease) 0.18s forwards;
     }
 
-    body.is-open .postcard,
     .postcard.flipped {
       transform: rotateY(180deg);
     }
@@ -775,16 +811,6 @@ VIEW_HTML = r"""
       align-items: flex-start;
       justify-content: flex-start;
       padding-right: 2%;
-      opacity: 0;
-      transform: translateY(18px);
-      transition: opacity 0.55s ease, transform 0.7s var(--ease-soft);
-      transition-delay: 0s;
-    }
-
-    body.is-open .message-area {
-      opacity: 1;
-      transform: translateY(0);
-      transition-delay: 0.34s;
     }
 
     .message-lines {
@@ -803,7 +829,6 @@ VIEW_HTML = r"""
       transform-origin: top left;
       transform: rotate(var(--message-rotation));
       filter: saturate(0.92);
-      transition: opacity 0.45s ease, transform 0.7s var(--ease-soft);
     }
 
     .message-line {
@@ -889,54 +914,37 @@ VIEW_HTML = r"""
     .controls {
       position: fixed;
       left: 50%;
-      bottom: 22px;
+      bottom: 20px;
       transform: translateX(-50%) translateY(8px);
-      width: min(82vw, 660px);
+      width: min(78vw, 332px);
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 999px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.88), rgba(248,242,232,0.72));
+      border: 1px solid rgba(255,255,255,0.86);
+      box-shadow:
+        0 22px 48px rgba(90, 112, 126, 0.14),
+        inset 0 1px 0 rgba(255,255,255,0.72);
+      backdrop-filter: blur(16px);
       opacity: 0;
-      transition: opacity 0.85s ease, transform 1s var(--ease-soft);
+      transition: opacity 0.85s ease, transform 1s var(--ease-soft), box-shadow 0.4s ease;
       z-index: 2;
     }
 
-    body.is-ready .controls,
-    body.is-open .controls {
+    body.is-ready .controls {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
-    }
-
-    .hint {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 18px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(246,241,233,0.8));
-      border: 1px solid rgba(255,255,255,0.86);
-      color: rgba(58, 53, 49, 0.82);
-      box-shadow: 0 12px 24px rgba(145, 184, 198, 0.12);
-      backdrop-filter: blur(12px);
-      font-size: 10px;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-    }
-
-    .hint::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #fffdf8, #d8b56f);
-      box-shadow: 0 0 14px rgba(194, 153, 75, 0.52);
     }
 
     .actions {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      justify-content: flex-end;
+      justify-content: center;
+      width: 100%;
     }
 
     .button {
@@ -949,26 +957,24 @@ VIEW_HTML = r"""
       font-weight: 700;
       letter-spacing: 0.24em;
       text-transform: uppercase;
-      transition: transform 0.25s ease, background 0.25s ease;
+      transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
     }
 
     .button:hover {
       transform: translateY(-1px);
     }
 
-    .button-primary {
-      border: 1px solid rgba(255,255,255,0.9);
-      background: rgba(255,255,255,0.76);
-      color: rgba(47, 80, 93, 0.92);
-      box-shadow: 0 14px 30px rgba(133, 176, 192, 0.14);
+    .button-secondary {
+      border: 1px solid rgba(169, 144, 93, 0.32);
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(243,235,223,0.82));
+      color: rgba(60, 56, 50, 0.9);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 14px 28px rgba(98, 83, 54, 0.1);
+      backdrop-filter: blur(10px);
     }
 
-    .button-secondary {
-      border: 1px solid rgba(169, 144, 93, 0.34);
-      background: linear-gradient(180deg, rgba(255,255,255,0.62), rgba(240,231,215,0.34));
-      color: rgba(60, 56, 50, 0.88);
-      box-shadow: 0 12px 24px rgba(98, 83, 54, 0.1);
-      backdrop-filter: blur(10px);
+    .button-secondary:hover {
+      background: linear-gradient(180deg, rgba(255,255,255,1), rgba(245,237,224,0.88));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 14px 28px rgba(98, 83, 54, 0.14);
     }
 
     @media (max-width: 760px) {
@@ -995,18 +1001,13 @@ VIEW_HTML = r"""
       }
 
       .controls {
-        width: min(92vw, 620px);
+        width: min(92vw, 420px);
       }
 
       .controls {
         position: static;
         transform: none;
-        margin-top: 8px;
-        flex-direction: row;
-        justify-content: center;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 8px;
+        margin-top: 10px;
       }
 
       body.is-ready .controls {
@@ -1022,12 +1023,6 @@ VIEW_HTML = r"""
         padding: 10px 14px;
         font-size: 9px;
         letter-spacing: 0.2em;
-      }
-
-      .hint {
-        padding: 9px 12px;
-        font-size: 8px;
-        letter-spacing: 0.18em;
       }
     }
 
@@ -1118,6 +1113,11 @@ VIEW_HTML = r"""
       <div class="reveal-halo"></div>
       <div class="reveal-flash"></div>
       <div class="reveal-sweep"></div>
+      <div class="ambient-orbs" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
 
       <div class="postcard-shell" id="postcardShell">
         <button class="flip-target" id="flipButton" aria-label="Okreni razglednicu">
@@ -1153,110 +1153,185 @@ VIEW_HTML = r"""
   <script>
     const body = document.body;
     const postcard = document.getElementById('postcard');
-    const postcardShell = document.getElementById('postcardShell');
     const flipButton = document.getElementById('flipButton');
     const replayButton = document.getElementById('replayButton');
-    
-    const brandMark = document.getElementById('brandMark');
-    const brandLogo = document.getElementById('brandLogo');
-    const scene = document.querySelector('.scene');
     const messageArea = document.getElementById('messageArea');
     const messageLines = document.getElementById('messageLines');
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    let isOpen = false;
+    let introTimers = [];
+    let flipped = false;
+    let audioContext;
+    let noiseBuffer;
+    let wavesNodes;
 
-    // Show a clean text fallback when the logo image path is unavailable.
-    if (brandLogo) {
-      brandLogo.addEventListener('error', () => {
-        brandMark?.classList.add('is-fallback');
-      }, { once: true });
+    function getAudioContext() {
+      if (prefersReducedMotion) return null;
+      if (!audioContext) {
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return null;
+        audioContext = new AudioCtor();
+      }
+      return audioContext;
     }
 
-    function setDrift(x = 0, y = 0) {
-      body.style.setProperty('--drift-x', `${x}px`);
-      body.style.setProperty('--drift-y', `${y}px`);
-      body.style.setProperty('--tilt-x', `${y * -0.12}deg`);
-      body.style.setProperty('--tilt-y', `${x * 0.14}deg`);
+    function getNoiseBuffer(ctx) {
+      if (noiseBuffer) return noiseBuffer;
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.7, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * 0.28;
+      }
+      noiseBuffer = buffer;
+      return buffer;
+    }
+
+    async function warmAudio() {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        try {
+          await ctx.resume();
+        } catch (error) {
+          return;
+        }
+      }
+      startAmbientWaves();
+    }
+
+    function startAmbientWaves() {
+      const ctx = getAudioContext();
+      if (!ctx || ctx.state !== 'running' || wavesNodes) return;
+
+      const master = ctx.createGain();
+      master.gain.value = 0.03;
+      master.connect(ctx.destination);
+
+      const makeWaveLayer = ({ gainValue, lowpassFreq, bandFreq, bandQ, lfoRate, lfoDepth }) => {
+        const source = ctx.createBufferSource();
+        source.buffer = getNoiseBuffer(ctx);
+        source.loop = true;
+
+        const lowpass = ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = lowpassFreq;
+
+        const bandpass = ctx.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.value = bandFreq;
+        bandpass.Q.value = bandQ;
+
+        const gain = ctx.createGain();
+        gain.gain.value = gainValue;
+
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = lfoRate;
+
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = lfoDepth;
+
+        source.connect(lowpass);
+        lowpass.connect(bandpass);
+        bandpass.connect(gain);
+        gain.connect(master);
+        lfo.connect(lfoGain);
+        lfoGain.connect(gain.gain);
+
+        source.start();
+        lfo.start();
+
+        return { source, lfo };
+      };
+
+      const nearWave = makeWaveLayer({
+        gainValue: 0.12,
+        lowpassFreq: 700,
+        bandFreq: 320,
+        bandQ: 0.7,
+        lfoRate: 0.18,
+        lfoDepth: 0.045,
+      });
+
+      const farWave = makeWaveLayer({
+        gainValue: 0.07,
+        lowpassFreq: 480,
+        bandFreq: 180,
+        bandQ: 0.5,
+        lfoRate: 0.11,
+        lfoDepth: 0.028,
+      });
+
+      wavesNodes = { master, nearWave, farWave };
+    }
+
+    function clearIntroTimers() {
+      introTimers.forEach(window.clearTimeout);
+      introTimers = [];
+    }
+
+    function setFlipState(nextState) {
+      flipped = nextState;
+      postcard.classList.toggle('flipped', flipped);
     }
 
     function fitMessageText() {
       if (!messageArea || !messageLines) return;
 
       let fontSize = 22.4;
-      messageLines.style.fontSize = `${fontSize}px`;
+      messageLines.style.fontSize = fontSize + 'px';
 
       while (fontSize > 13.6) {
         const tooTall = messageLines.scrollHeight > messageArea.clientHeight;
         const tooWide = Array.from(messageLines.children).some(
-          (line) => line.scrollWidth > messageArea.clientWidth,
+          (line) => line.scrollWidth > messageArea.clientWidth
         );
 
         if (!tooTall && !tooWide) break;
 
         fontSize -= 0.5;
-        messageLines.style.fontSize = `${fontSize}px`;
+        messageLines.style.fontSize = fontSize + 'px';
       }
     }
 
-    function syncOpenState(nextState) {
-      isOpen = nextState;
-      body.classList.toggle('is-open', isOpen);
-      postcard.classList.toggle('flipped', isOpen);
-      flipButton.setAttribute('aria-expanded', String(isOpen));
+    function runReveal() {
+      clearIntroTimers();
+      setFlipState(false);
+      body.classList.remove('reveal-start', 'reveal-active', 'is-ready');
+
+      introTimers.push(window.setTimeout(() => {
+        body.classList.add('reveal-start');
+      }, 140));
+
+      introTimers.push(window.setTimeout(() => {
+        body.classList.add('reveal-active');
+      }, 860));
+
+      introTimers.push(window.setTimeout(() => {
+        body.classList.remove('reveal-start', 'reveal-active');
+        body.classList.add('is-ready');
+      }, 2140));
     }
 
-    function openPostcard({ replay = false } = {}) {
-      if (isOpen && !replay) return;
-
-      if (replay) {
-        syncOpenState(false);
-        window.setTimeout(() => syncOpenState(true), prefersReducedMotion ? 20 : 120);
-        return;
-      }
-
-      syncOpenState(true);
+    function toggleFlip() {
+      warmAudio();
+      setFlipState(!flipped);
     }
 
-    function handlePointerMove(event) {
-      if (!scene || !postcardShell || !isOpen || prefersReducedMotion) return;
-
-      const rect = scene.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width - 0.5) * 10;
-      const y = ((event.clientY - rect.top) / rect.height - 0.5) * 8;
-      setDrift(x, y);
-    }
-
-    function resetDrift() {
-      setDrift(0, 0);
-    }
-
-    flipButton.addEventListener('click', (event) => {
-      event.preventDefault();
-      openPostcard();
-    });
-
-    replayButton.addEventListener('click', () => {
-      openPostcard({ replay: true });
-    });
-
-    scene?.addEventListener('pointermove', handlePointerMove);
-    scene?.addEventListener('pointerleave', resetDrift);
-
+    flipButton.addEventListener('click', toggleFlip);
+    replayButton.addEventListener('click', runReveal);
+    window.addEventListener('pointerdown', warmAudio, { passive: true });
+    window.addEventListener('keydown', warmAudio);
     window.addEventListener('load', () => {
       fitMessageText();
-      resetDrift();
-      body.classList.add('is-ready');
-      syncOpenState(false);
+      warmAudio();
+      runReveal();
     }, { once: true });
-
-    window.addEventListener('resize', () => {
-      fitMessageText();
-      resetDrift();
-    });
+    window.addEventListener('resize', fitMessageText);
   </script>
 </body>
 </html>
+
 """
 
 
@@ -1320,6 +1395,10 @@ def utc_now_iso() -> str:
 
 def generate_slug() -> str:
     return secrets.token_urlsafe(6)
+
+
+def build_postcard_url(slug: str) -> str:
+    return f"{PUBLIC_POSTCARD_BASE_URL}/p/{slug}"
 
 
 def normalize_shopify_order_id(order_id) -> str:
@@ -1570,7 +1649,7 @@ def process_shopify_order_webhook():
         }), 200
 
     slug = insert_postcard(details, template)
-    postcard_url = f"{request.host_url.rstrip('/')}/p/{slug}"
+    postcard_url = build_postcard_url(slug)
 
     return jsonify({
         "ok": True,
@@ -1634,7 +1713,7 @@ def download_links():
             "links": [],
         }), 200
 
-    postcard_url = f"{request.host_url.rstrip('/')}/p/{postcard['slug']}"
+    postcard_url = build_postcard_url(postcard["slug"])
 
     return jsonify({
         "ready": True,
@@ -1673,7 +1752,7 @@ def postcard_by_order(order_id):
         "ok": True,
         "order_id": normalize_shopify_order_id(order_id),
         "slug": postcard["slug"],
-        "url": f"{request.host_url.rstrip('/')}/p/{postcard['slug']}",
+        "url": build_postcard_url(postcard["slug"]),
     }), 200
 
 
@@ -1733,7 +1812,7 @@ def latest_postcard():
     if not postcard:
         return "Nema razglednica.", 404
 
-    return f"{request.host_url.rstrip('/')}/p/{postcard['slug']}", 200
+    return build_postcard_url(postcard["slug"]), 200
 
 
 if __name__ == "__main__":
