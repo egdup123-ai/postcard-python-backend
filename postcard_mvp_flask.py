@@ -1467,10 +1467,18 @@ MESSAGE_PROPERTY_NAMES = {
 
 FROM_PROPERTY_NAMES = {
     "from",
+    "from field",
+    "from name",
+    "sender",
+    "sender name",
 }
 
 TO_PROPERTY_NAMES = {
     "to",
+    "to field",
+    "to name",
+    "recipient",
+    "recipient name",
 }
 
 
@@ -1542,6 +1550,17 @@ def generate_unique_slug(db, preferred_slug: str = "") -> str:
         if not slug_exists(db, candidate):
             return candidate
         suffix += 1
+
+
+def is_probably_generated_slug(slug: str) -> bool:
+    raw_slug = str(slug or "").strip()
+    if not raw_slug:
+        return False
+
+    if "_" in raw_slug or re.search(r"[A-Z]", raw_slug):
+        return True
+
+    return re.fullmatch(r"[A-Za-z0-9_-]{8,}", raw_slug) is not None and "-to-" not in raw_slug
 
 
 def build_preferred_postcard_slug(details) -> str:
@@ -1621,6 +1640,7 @@ def format_message_lines(message: str, max_lines: int = 3, max_chars_per_line: i
 def insert_postcard(details, template):
     db = get_db()
     order_id_candidates = build_order_id_candidates(details["order_id"])
+    preferred_slug = build_preferred_postcard_slug(details)
 
     if order_id_candidates:
         placeholders = ", ".join("?" for _ in order_id_candidates)
@@ -1635,11 +1655,16 @@ def insert_postcard(details, template):
             order_id_candidates,
         ).fetchone()
         if existing:
+            next_slug = existing["slug"]
+            if preferred_slug and is_probably_generated_slug(existing["slug"]):
+                next_slug = generate_unique_slug(db, preferred_slug)
+
             db.execute(
                 """
                 UPDATE postcards
                 SET order_id = ?,
                     order_name = ?,
+                    slug = ?,
                     product_title = ?,
                     message = ?,
                     front_image_url = ?,
@@ -1649,6 +1674,7 @@ def insert_postcard(details, template):
                 (
                     details["order_id"],
                     details["order_name"],
+                    next_slug,
                     details["product_title"],
                     details["message"],
                     template["front"],
@@ -1657,9 +1683,9 @@ def insert_postcard(details, template):
                 ),
             )
             db.commit()
-            return existing["slug"]
+            return next_slug
 
-    slug = generate_unique_slug(db, build_preferred_postcard_slug(details))
+    slug = generate_unique_slug(db, preferred_slug)
     db.execute(
         """
         INSERT INTO postcards (
