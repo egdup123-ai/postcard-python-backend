@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 from textwrap import wrap
 import re
+import unicodedata
 
 app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
@@ -1464,6 +1465,14 @@ MESSAGE_PROPERTY_NAMES = {
     "postcard-note",
 }
 
+FROM_PROPERTY_NAMES = {
+    "from",
+}
+
+TO_PROPERTY_NAMES = {
+    "to",
+}
+
 
 def extract_line_item_properties(item):
     raw_properties = item.get("properties", [])
@@ -1479,27 +1488,111 @@ def extract_line_item_properties(item):
             yield str(prop.get("name", "")).strip(), str(prop.get("value", "")).strip()
 
 
+def normalize_property_name(prop_name: str) -> str:
+    return str(prop_name or "").casefold().replace("_", " ").replace("-", " ").strip()
+
+
+def slugify_name_part(value: str) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+
+    transliteration_map = str.maketrans({
+        "č": "c",
+        "ć": "c",
+        "š": "s",
+        "ž": "z",
+        "đ": "dj",
+        "Č": "c",
+        "Ć": "c",
+        "Š": "s",
+        "Ž": "z",
+        "Đ": "dj",
+    })
+    normalized = raw_value.translate(transliteration_map)
+    normalized = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.casefold()
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
+    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
+    return normalized[:80]
+
+
+def slug_exists(db, slug: str) -> bool:
+    return db.execute(
+        "SELECT 1 FROM postcards WHERE slug = ? LIMIT 1",
+        (slug,),
+    ).fetchone() is not None
+
+
+def generate_unique_slug(db, preferred_slug: str = "") -> str:
+    base_slug = slugify_name_part(preferred_slug)
+
+    if not base_slug:
+        while True:
+            random_slug = generate_slug()
+            if not slug_exists(db, random_slug):
+                return random_slug
+
+    if not slug_exists(db, base_slug):
+        return base_slug
+
+    suffix = 2
+    while True:
+        candidate = f"{base_slug}-{suffix}"
+        if not slug_exists(db, candidate):
+            return candidate
+        suffix += 1
+
+
+def build_preferred_postcard_slug(details) -> str:
+    from_slug = slugify_name_part(details.get("from_name", ""))
+    to_slug = slugify_name_part(details.get("to_name", ""))
+
+    if from_slug and to_slug:
+        return f"{from_slug}-to-{to_slug}"
+    if to_slug:
+        return f"to-{to_slug}"
+    if from_slug:
+        return f"from-{from_slug}"
+    return ""
+
+
 def extract_postcard_details(payload):
     order_id = normalize_shopify_order_id(payload.get("id", ""))
     order_name = str(payload.get("name", "")).strip()
 
     for item in payload.get("line_items", []):
         product_title = str(item.get("title", "")).strip()
+        message = ""
+        from_name = ""
+        to_name = ""
+
         for prop_name, prop_value in extract_line_item_properties(item):
-            normalized_prop_name = prop_name.casefold().replace("_", " ").replace("-", " ").strip()
-            if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value:
-                return {
-                    "order_id": order_id,
-                    "order_name": order_name,
-                    "product_title": product_title,
-                    "message": prop_value,
-                }
+            normalized_prop_name = normalize_property_name(prop_name)
+            if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
+                message = prop_value
+            elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
+                from_name = prop_value
+            elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
+                to_name = prop_value
+
+        if message:
+            return {
+                "order_id": order_id,
+                "order_name": order_name,
+                "product_title": product_title,
+                "message": message,
+                "from_name": from_name,
+                "to_name": to_name,
+            }
 
     return {
         "order_id": order_id,
         "order_name": order_name,
         "product_title": "",
         "message": "",
+        "from_name": "",
+        "to_name": "",
     }
 
 
@@ -1566,7 +1659,7 @@ def insert_postcard(details, template):
             db.commit()
             return existing["slug"]
 
-    slug = generate_slug()
+    slug = generate_unique_slug(db, build_preferred_postcard_slug(details))
     db.execute(
         """
         INSERT INTO postcards (
@@ -1624,6 +1717,8 @@ def process_shopify_order_webhook():
         "order_id_raw": str(payload.get("id", "")).strip(),
         "order_id_normalized": details["order_id"],
         "order_name": details["order_name"],
+        "from_name": details["from_name"],
+        "to_name": details["to_name"],
         "line_item_count": len(payload.get("line_items", [])),
         "property_names": property_names,
         "product_titles": [str(item.get("title", "")).strip() for item in payload.get("line_items", [])],
