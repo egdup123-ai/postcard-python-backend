@@ -1497,7 +1497,13 @@ def extract_line_item_properties(item):
 
 
 def normalize_property_name(prop_name: str) -> str:
-    return str(prop_name or "").casefold().replace("_", " ").replace("-", " ").strip()
+    normalized = str(prop_name or "").strip()
+
+    bracket_match = re.fullmatch(r"(?:properties|property|attributes|custom_attributes|customAttributes)\[(.+?)\]", normalized)
+    if bracket_match:
+        normalized = bracket_match.group(1)
+
+    return normalized.casefold().replace("_", " ").replace("-", " ").strip()
 
 
 def slugify_name_part(value: str) -> str:
