@@ -388,77 +388,41 @@ VIEW_HTML = r"""
       transform: translateX(-50%) translateY(0) scale(1);
     }
 
-    .story-panel {
-      position: fixed;
-      top: 94px;
-      left: 50%;
-      transform: translateX(-50%) translateY(16px);
-      width: min(72vw, 520px);
+    .scene-layout {
+      position: relative;
+      width: min(100%, 1100px);
       display: grid;
-      gap: 7px;
-      padding: 14px 18px;
-      border-radius: 24px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      box-shadow: 0 16px 42px rgba(93, 123, 138, 0.1);
-      backdrop-filter: blur(16px);
-      text-align: center;
-      opacity: 0;
-      transition: opacity 0.9s ease, transform 1s var(--ease);
-      z-index: 2;
-    }
-
-    .story-panel-eyebrow {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-      color: rgba(103, 118, 125, 0.72);
-    }
-
-    .story-panel-title {
-      font-family: "Cinzel", Georgia, serif;
-      font-size: clamp(18px, 2.4vw, 28px);
-      letter-spacing: 0.04em;
-      color: rgba(42, 63, 75, 0.92);
-    }
-
-    .story-panel-copy {
-      margin: 0 auto;
-      max-width: 42ch;
-      font-size: 12px;
-      line-height: 1.55;
-      color: rgba(72, 91, 101, 0.8);
-    }
-
-    .story-journey {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(180px, 230px);
+      gap: clamp(18px, 3vw, 32px);
       align-items: center;
-      gap: 12px;
-      margin-top: 4px;
+      margin-top: 34px;
     }
 
     .story-stop {
       min-width: 0;
-      padding: 12px 14px 13px;
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(251,244,235,0.82));
-      border: 1px solid rgba(255,255,255,0.92);
+      display: grid;
+      gap: 8px;
+      padding: 18px 18px 16px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,241,231,0.78));
+      border: 1px solid rgba(255,255,255,0.9);
       box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.84),
-        0 14px 28px rgba(95, 115, 125, 0.08);
-      text-align: left;
+        inset 0 1px 0 rgba(255,255,255,0.86),
+        0 20px 40px rgba(90, 110, 122, 0.11);
+      backdrop-filter: blur(14px);
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.9s ease, transform 1s var(--ease);
     }
 
     .story-stop-label {
       display: block;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
       font-size: 9px;
       font-weight: 700;
       letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: rgba(112, 123, 129, 0.76);
+      color: rgba(106, 118, 126, 0.76);
     }
 
     .story-stop-name {
@@ -467,45 +431,30 @@ VIEW_HTML = r"""
       text-overflow: ellipsis;
       white-space: nowrap;
       font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(22px, 2.6vw, 30px);
+      font-size: clamp(24px, 2.7vw, 34px);
       line-height: 1;
       color: rgba(47, 36, 39, 0.96);
       letter-spacing: 0.015em;
     }
 
-    .story-route-seal {
-      display: inline-grid;
-      place-items: center;
-      gap: 4px;
-      width: 58px;
-      height: 58px;
-      border-radius: 999px;
-      background:
-        radial-gradient(circle at 35% 35%, rgba(255,255,255,0.98), rgba(245,232,210,0.94) 48%, rgba(221, 194, 149, 0.86) 100%);
-      border: 1px solid rgba(255,255,255,0.92);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.82),
-        0 12px 24px rgba(120, 97, 63, 0.12);
-      color: rgba(95, 74, 42, 0.82);
-      text-transform: uppercase;
+    .story-stop-meta {
+      font-size: 11px;
+      line-height: 1.4;
+      color: rgba(88, 102, 111, 0.72);
     }
 
-    .story-route-seal strong {
-      font-size: 9px;
-      letter-spacing: 0.22em;
-      line-height: 1;
+    .story-stop-from {
+      text-align: left;
     }
 
-    .story-route-seal span {
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: 20px;
-      line-height: 1;
+    .story-stop-to {
+      text-align: right;
     }
 
-    body.reveal-active .story-panel,
-    body.is-ready .story-panel {
+    body.reveal-active .story-stop,
+    body.is-ready .story-stop {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translateY(0);
     }
 
     .scene {
@@ -515,7 +464,8 @@ VIEW_HTML = r"""
       display: grid;
       place-items: center;
       perspective: 2200px;
-      margin-top: 34px;
+      margin-top: 0;
+      justify-self: center;
     }
 
     .scene::before {
@@ -1055,23 +1005,14 @@ VIEW_HTML = r"""
         padding: 12px 10px 56px;
       }
 
-      .story-panel {
-        top: 76px;
-        width: min(90vw, 520px);
-        padding: 14px 16px;
-      }
-
-      .story-journey {
-        grid-template-columns: 1fr;
-        gap: 8px;
-      }
-
-      .story-route-seal {
-        width: 100%;
-        height: auto;
-        padding: 8px 14px;
-        grid-auto-flow: column;
-        justify-content: center;
+      .scene-layout {
+        width: min(92vw, 860px);
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "from to"
+          "scene scene";
+        gap: 12px;
+        margin-top: 70px;
       }
 
       .brand-mark {
@@ -1080,9 +1021,21 @@ VIEW_HTML = r"""
         padding: 10px 14px;
       }
 
+      .story-stop {
+        padding: 14px 14px 13px;
+      }
+
+      .story-stop-from {
+        grid-area: from;
+      }
+
+      .story-stop-to {
+        grid-area: to;
+      }
+
       .scene {
+        grid-area: scene;
         width: min(92vw, calc((100svh - 220px) * 1.5), 620px);
-        margin-top: 56px;
       }
 
       .controls {
@@ -1121,9 +1074,23 @@ VIEW_HTML = r"""
         min-width: min(58vw, 208px);
       }
 
+      .scene-layout {
+        width: min(96vw, 520px);
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "from"
+          "scene"
+          "to";
+        gap: 10px;
+        margin-top: 74px;
+      }
+
+      .story-stop {
+        text-align: left;
+      }
+
       .scene {
         width: min(96vw, calc((100svh - 205px) * 1.5), 520px);
-        margin-top: 62px;
       }
 
       .controls {
@@ -1151,9 +1118,13 @@ VIEW_HTML = r"""
         min-width: min(62vw, 210px);
       }
 
+      .scene-layout {
+        width: min(90vw, 480px);
+        margin-top: 62px;
+      }
+
       .scene {
         width: min(90vw, calc((100svh - 190px) * 1.5), 480px);
-        margin-top: 56px;
       }
 
       .controls {
@@ -1196,58 +1167,57 @@ VIEW_HTML = r"""
       <img src="/static/send-a-memory-logo.png" alt="Send a Memory" id="brandLogo">
       <span class="brand-mark-fallback">Send a Memory</span>
     </div>
-    <section class="story-panel" aria-label="Postcard journey details">
-      <div class="story-panel-eyebrow">Split, Croatia</div>
-      <div class="story-panel-title">A memory carried by sun and sea</div>
-      <p class="story-panel-copy">Opened like a holiday keepsake and addressed like a real postcard from the coast.</p>
-      <div class="story-journey">
-        <div class="story-stop">
+    <div class="scene-layout">
+      <aside class="story-stop story-stop-from" aria-label="Postcard sender">
+        <div>
           <span class="story-stop-label">From</span>
           <span class="story-stop-name">{{ sender_name or 'A traveler' }}</span>
         </div>
-        <div class="story-route-seal" aria-hidden="true">
-          <strong>Route</strong>
-          <span>to</span>
+        <div class="story-stop-meta">Sent from Split, Croatia</div>
+      </aside>
+
+      <section class="scene" aria-label="Digital postcard reveal scene">
+        <div class="reveal-halo"></div>
+        <div class="reveal-flash"></div>
+        <div class="reveal-sweep"></div>
+        <div class="ambient-orbs" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
         </div>
-        <div class="story-stop">
+
+        <div class="postcard-shell" id="postcardShell">
+          <button class="flip-target" id="flipButton" aria-label="Okreni razglednicu">
+            <div class="card-glow"></div>
+
+            <div class="postcard" id="postcard">
+              <article class="face front">
+                <img src="{{ postcard['front_image_url'] }}" alt="Front image">
+              </article>
+
+              <article class="face back">
+                <img src="{{ postcard['back_image_url'] }}" alt="Back image">
+                <div class="message-area" id="messageArea">
+                  <div class="message-lines" id="messageLines">
+                    {% for line in message_lines %}
+                      <div class="message-line">{{ line }}</div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </article>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <aside class="story-stop story-stop-to" aria-label="Postcard recipient">
+        <div>
           <span class="story-stop-label">To</span>
           <span class="story-stop-name">{{ recipient_name or 'Someone special' }}</span>
         </div>
-      </div>
-    </section>
-    <section class="scene" aria-label="Digital postcard reveal scene">
-      <div class="reveal-halo"></div>
-      <div class="reveal-flash"></div>
-      <div class="reveal-sweep"></div>
-      <div class="ambient-orbs" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-
-      <div class="postcard-shell" id="postcardShell">
-        <button class="flip-target" id="flipButton" aria-label="Okreni razglednicu">
-          <div class="card-glow"></div>
-
-          <div class="postcard" id="postcard">
-            <article class="face front">
-              <img src="{{ postcard['front_image_url'] }}" alt="Front image">
-            </article>
-
-            <article class="face back">
-              <img src="{{ postcard['back_image_url'] }}" alt="Back image">
-              <div class="message-area" id="messageArea">
-                <div class="message-lines" id="messageLines">
-                  {% for line in message_lines %}
-                    <div class="message-line">{{ line }}</div>
-                  {% endfor %}
-                </div>
-              </div>
-            </article>
-          </div>
-        </button>
-      </div>
-    </section>
+        <div class="story-stop-meta">A digital postcard keepsake</div>
+      </aside>
+    </div>
 
     <div class="controls">
       <div class="actions">
