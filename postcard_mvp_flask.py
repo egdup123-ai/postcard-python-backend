@@ -1633,31 +1633,36 @@ def extract_postcard_details(payload):
     order_id = normalize_shopify_order_id(payload.get("id", ""))
     order_name = str(payload.get("name", "")).strip()
     order_level_values = pick_property_values(extract_named_values(payload, ("note_attributes", "noteAttributes", "attributes", "custom_attributes", "customAttributes")))
+    message = order_level_values["message"]
+    from_name = order_level_values["from_name"]
+    to_name = order_level_values["to_name"]
+    product_title = ""
 
     for item in payload.get("line_items", []):
-        product_title = str(item.get("title", "")).strip()
+        item_product_title = str(item.get("title", "")).strip()
         item_values = pick_property_values(extract_line_item_properties(item))
-        message = item_values["message"]
-        from_name = item_values["from_name"] or order_level_values["from_name"]
-        to_name = item_values["to_name"] or order_level_values["to_name"]
 
-        if message:
-            return {
-                "order_id": order_id,
-                "order_name": order_name,
-                "product_title": product_title,
-                "message": message,
-                "from_name": from_name,
-                "to_name": to_name,
-            }
+        if item_product_title and (not product_title or (not get_template_for_product(product_title) and get_template_for_product(item_product_title))):
+            product_title = item_product_title
+
+        if item_values["message"] and not message:
+            message = item_values["message"]
+            if item_product_title:
+                product_title = item_product_title
+
+        if item_values["from_name"] and not from_name:
+            from_name = item_values["from_name"]
+
+        if item_values["to_name"] and not to_name:
+            to_name = item_values["to_name"]
 
     return {
         "order_id": order_id,
         "order_name": order_name,
-        "product_title": "",
-        "message": "",
-        "from_name": "",
-        "to_name": "",
+        "product_title": product_title,
+        "message": message,
+        "from_name": from_name,
+        "to_name": to_name,
     }
 
 
