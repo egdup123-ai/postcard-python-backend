@@ -1626,6 +1626,31 @@ def extract_property_value(raw_value):
     return ""
 
 
+def iter_named_values_deep(raw_value, seen=None):
+    if seen is None:
+        seen = set()
+
+    if isinstance(raw_value, (dict, list)):
+        object_id = id(raw_value)
+        if object_id in seen:
+            return
+        seen.add(object_id)
+
+    if isinstance(raw_value, dict):
+        key_name = extract_property_key(raw_value)
+        prop_value = extract_property_value(raw_value)
+        if key_name and prop_value:
+            yield key_name, prop_value
+
+        for nested_value in raw_value.values():
+            yield from iter_named_values_deep(nested_value, seen)
+        return
+
+    if isinstance(raw_value, list):
+        for nested_value in raw_value:
+            yield from iter_named_values_deep(nested_value, seen)
+
+
 def iter_named_values(raw_values):
     if isinstance(raw_values, dict):
         key_name = extract_property_key(raw_values)
@@ -1793,6 +1818,15 @@ def extract_postcard_details(payload):
 
         if item_values["to_name"] and not to_name:
             to_name = item_values["to_name"]
+
+    if not message or not from_name or not to_name:
+        deep_values = pick_property_values(iter_named_values_deep(payload))
+        if deep_values["message"] and not message:
+            message = deep_values["message"]
+        if deep_values["from_name"] and not from_name:
+            from_name = deep_values["from_name"]
+        if deep_values["to_name"] and not to_name:
+            to_name = deep_values["to_name"]
 
     return {
         "order_id": order_id,
