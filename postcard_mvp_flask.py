@@ -392,7 +392,7 @@ VIEW_HTML = r"""
       position: relative;
       width: min(100%, 1100px);
       display: grid;
-      grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(180px, 230px);
+      grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(150px, 190px);
       gap: clamp(18px, 3vw, 32px);
       align-items: center;
       margin-top: 34px;
@@ -401,28 +401,26 @@ VIEW_HTML = r"""
     .story-stop {
       min-width: 0;
       display: grid;
-      gap: 8px;
-      padding: 18px 18px 16px;
-      border-radius: 24px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,241,231,0.78));
-      border: 1px solid rgba(255,255,255,0.9);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.86),
-        0 20px 40px rgba(90, 110, 122, 0.11);
-      backdrop-filter: blur(14px);
+      gap: 6px;
+      padding: 0;
+      background: none;
+      border: 0;
+      box-shadow: none;
+      backdrop-filter: none;
       opacity: 0;
       transform: translateY(16px);
       transition: opacity 0.9s ease, transform 1s var(--ease);
+      position: relative;
     }
 
     .story-stop-label {
       display: block;
       margin-bottom: 2px;
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 700;
-      letter-spacing: 0.22em;
+      letter-spacing: 0.24em;
       text-transform: uppercase;
-      color: rgba(106, 118, 126, 0.76);
+      color: rgba(113, 101, 86, 0.72);
     }
 
     .story-stop-name {
@@ -431,24 +429,48 @@ VIEW_HTML = r"""
       text-overflow: ellipsis;
       white-space: nowrap;
       font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(24px, 2.7vw, 34px);
-      line-height: 1;
-      color: rgba(47, 36, 39, 0.96);
-      letter-spacing: 0.015em;
+      font-size: clamp(21px, 2.2vw, 29px);
+      line-height: 1.02;
+      color: rgba(77, 55, 40, 0.94);
+      letter-spacing: 0.01em;
     }
 
     .story-stop-meta {
-      font-size: 11px;
+      font-size: 10px;
       line-height: 1.4;
-      color: rgba(88, 102, 111, 0.72);
+      color: rgba(119, 105, 88, 0.68);
+    }
+
+    .story-stop::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 42px;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(186, 162, 126, 0), rgba(186, 162, 126, 0.9));
+      opacity: 0.85;
     }
 
     .story-stop-from {
-      text-align: left;
+      text-align: right;
+      justify-self: end;
+      padding-right: 58px;
     }
 
     .story-stop-to {
-      text-align: right;
+      text-align: left;
+      justify-self: start;
+      padding-left: 58px;
+    }
+
+    .story-stop-from::before {
+      right: 0;
+      transform: translateY(-50%);
+    }
+
+    .story-stop-to::before {
+      left: 0;
+      transform: translateY(-50%) scaleX(-1);
     }
 
     body.reveal-active .story-stop,
@@ -846,7 +868,7 @@ VIEW_HTML = r"""
       line-height: 1.14;
       letter-spacing: 0.015em;
       font-weight: 600;
-      color: rgba(83, 60, 45, 0.88);
+      color: rgba(108, 74, 48, 0.94);
       text-shadow: 0 1px 0 rgba(255,255,255,0.12);
       transform-origin: top left;
       transform: rotate(var(--message-rotation));
@@ -1022,15 +1044,39 @@ VIEW_HTML = r"""
       }
 
       .story-stop {
-        padding: 14px 14px 13px;
+        gap: 5px;
+      }
+
+      .story-stop::before {
+        width: 28px;
       }
 
       .story-stop-from {
         grid-area: from;
+        justify-self: stretch;
+        text-align: left;
+        padding-right: 0;
+        padding-left: 34px;
       }
 
       .story-stop-to {
         grid-area: to;
+        justify-self: stretch;
+        text-align: right;
+        padding-left: 0;
+        padding-right: 34px;
+      }
+
+      .story-stop-from::before {
+        left: 0;
+        right: auto;
+        transform: translateY(-50%) scaleX(-1);
+      }
+
+      .story-stop-to::before {
+        left: auto;
+        right: 0;
+        transform: translateY(-50%);
       }
 
       .scene {
@@ -1086,6 +1132,19 @@ VIEW_HTML = r"""
       }
 
       .story-stop {
+        text-align: left;
+        padding-left: 28px;
+        padding-right: 0;
+      }
+
+      .story-stop::before {
+        left: 0;
+        right: auto;
+        width: 24px;
+        transform: translateY(-50%) scaleX(-1);
+      }
+
+      .story-stop-to {
         text-align: left;
       }
 
