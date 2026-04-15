@@ -12,6 +12,21 @@ app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
 PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
 
+POSTCARD_MESSAGE_STYLE = {
+    "desktop_font_size": "24px",
+    "mobile_font_size": "16px",
+    "font_family": '"Caveat", "Brush Script MT", cursive',
+    "font_weight": "600",
+    "color": "#6c4a30",
+    "line_height": "1.16",
+    "letter_spacing": "0.015em",
+    "rotation": "0deg",
+    "top": "46.8%",
+    "left": "53.2%",
+    "width": "38.9%",
+    "height": "18%",
+}
+
 TEMPLATES = {
     "Riva": {
         "front": "https://sendamemory.store/cdn/shop/files/Panorama_Splita.jpg?v=1775754558&width=1200",
@@ -68,8 +83,8 @@ VIEW_HTML = r"""
       --panel-bg: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,248,238,0.68));
       --panel-border: rgba(255,255,255,0.84);
       --accent: #b78b4e;
-      --message-font-size: 22.4px;
-      --message-rotation: -1.8deg;
+      --message-font-size: {{ message_style.desktop_font_size }};
+      --message-rotation: {{ message_style.rotation }};
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
       --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
       --drift-x: 0px;
@@ -846,10 +861,10 @@ VIEW_HTML = r"""
     .message-area {
       position: absolute;
       z-index: 1;
-      top: 46.4%;
-      left: 53.0%;
-      width: 38.9%;
-      height: 19.2%;
+      top: {{ message_style.top }};
+      left: {{ message_style.left }};
+      width: {{ message_style.width }};
+      height: {{ message_style.height }};
       overflow: hidden;
       display: flex;
       align-items: flex-start;
@@ -863,12 +878,12 @@ VIEW_HTML = r"""
       gap: 0.2em;
       text-align: left;
       align-content: start;
-      font-family: "Caveat", "Brush Script MT", cursive;
+      font-family: {{ message_style.font_family|safe }};
       font-size: var(--message-font-size);
-      line-height: 1.14;
-      letter-spacing: 0.015em;
-      font-weight: 600;
-      color: rgba(108, 74, 48, 0.94);
+      line-height: {{ message_style.line_height }};
+      letter-spacing: {{ message_style.letter_spacing }};
+      font-weight: {{ message_style.font_weight }};
+      color: {{ message_style.color }};
       text-shadow: 0 1px 0 rgba(255,255,255,0.12);
       transform-origin: top left;
       transform: rotate(var(--message-rotation));
@@ -1158,14 +1173,14 @@ VIEW_HTML = r"""
       }
 
       .message-area {
-        top: 46.8%;
-        left: 53.2%;
-        width: 38.9%;
-        height: 18%;
+        top: {{ message_style.top }};
+        left: {{ message_style.left }};
+        width: {{ message_style.width }};
+        height: {{ message_style.height }};
       }
 
       .message-lines {
-        font-size: 15.6px;
+        font-size: {{ message_style.mobile_font_size }};
         line-height: 1.08;
         gap: 0.16em;
       }
@@ -2295,7 +2310,12 @@ def view_postcard(slug):
         return "Razglednica nije pronadena.", 404
 
     message_lines = format_message_lines(postcard["message"])
-    return render_template_string(VIEW_HTML, postcard=postcard, message_lines=message_lines)
+    return render_template_string(
+        VIEW_HTML,
+        postcard=postcard,
+        message_lines=message_lines,
+        message_style=POSTCARD_MESSAGE_STYLE,
+    )
 
 
 @app.route("/api/debug/postcards", methods=["GET"])
