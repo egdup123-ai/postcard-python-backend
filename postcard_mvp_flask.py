@@ -2171,15 +2171,6 @@ def process_shopify_order_webhook():
         "product_titles": [str(item.get("title", "")).strip() for item in payload.get("line_items", [])],
     }, ensure_ascii=True))
 
-    if not details["message"]:
-        return jsonify({
-            "ok": False,
-            "error": "Postcard message not found in line item properties",
-            "topic": source_topic,
-            "order_id": details["order_id"],
-            "order_name": details["order_name"],
-        }), 200
-
     assets = resolve_postcard_assets(details)
     if assets is None:
         return jsonify({
