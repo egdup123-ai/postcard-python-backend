@@ -1629,6 +1629,21 @@ MESSAGE_PROPERTY_NAMES = {
     "postcard-note",
 }
 
+FRONT_IMAGE_URL_PROPERTY_NAMES = {
+    "front image url",
+    "uploaded front image",
+    "uploaded front image url",
+    "front image",
+    "front image link",
+}
+
+BACK_IMAGE_URL_PROPERTY_NAMES = {
+    "selected postcard back image",
+    "back image url",
+    "postcard back image",
+    "back image",
+}
+
 FROM_PROPERTY_NAMES = {
     "from",
     "from field",
@@ -1747,12 +1762,18 @@ def pick_property_values(named_values):
     message = ""
     from_name = ""
     to_name = ""
+    front_image_url = ""
+    back_image_url = ""
 
     for prop_name, prop_value in named_values:
         normalized_prop_name = normalize_property_name(prop_name)
 
         if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
             message = prop_value
+        elif normalized_prop_name in FRONT_IMAGE_URL_PROPERTY_NAMES and prop_value and not front_image_url:
+            front_image_url = prop_value
+        elif normalized_prop_name in BACK_IMAGE_URL_PROPERTY_NAMES and prop_value and not back_image_url:
+            back_image_url = prop_value
         elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
             from_name = prop_value
         elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
@@ -1762,6 +1783,8 @@ def pick_property_values(named_values):
         "message": message,
         "from_name": from_name,
         "to_name": to_name,
+        "front_image_url": front_image_url,
+        "back_image_url": back_image_url,
     }
 
 
@@ -1858,6 +1881,8 @@ def extract_postcard_details(payload):
     message = order_level_values["message"]
     from_name = order_level_values["from_name"]
     to_name = order_level_values["to_name"]
+    front_image_url = order_level_values["front_image_url"]
+    back_image_url = order_level_values["back_image_url"]
     product_title = ""
 
     for item in payload.get("line_items", []):
@@ -1872,16 +1897,30 @@ def extract_postcard_details(payload):
             if item_product_title:
                 product_title = item_product_title
 
+        if item_values["front_image_url"] and not front_image_url:
+            front_image_url = item_values["front_image_url"]
+            if item_product_title:
+                product_title = item_product_title
+
+        if item_values["back_image_url"] and not back_image_url:
+            back_image_url = item_values["back_image_url"]
+            if item_product_title:
+                product_title = item_product_title
+
         if item_values["from_name"] and not from_name:
             from_name = item_values["from_name"]
 
         if item_values["to_name"] and not to_name:
             to_name = item_values["to_name"]
 
-    if not message or not from_name or not to_name:
+    if not message or not from_name or not to_name or not front_image_url or not back_image_url:
         deep_values = pick_property_values(iter_named_values_deep(payload))
         if deep_values["message"] and not message:
             message = deep_values["message"]
+        if deep_values["front_image_url"] and not front_image_url:
+            front_image_url = deep_values["front_image_url"]
+        if deep_values["back_image_url"] and not back_image_url:
+            back_image_url = deep_values["back_image_url"]
         if deep_values["from_name"] and not from_name:
             from_name = deep_values["from_name"]
         if deep_values["to_name"] and not to_name:
@@ -1894,6 +1933,8 @@ def extract_postcard_details(payload):
         "message": message,
         "from_name": from_name,
         "to_name": to_name,
+        "front_image_url": front_image_url,
+        "back_image_url": back_image_url,
     }
 
 
@@ -1919,7 +1960,27 @@ def format_message_lines(message: str, max_lines: int = 3, max_chars_per_line: i
     return wrapped
 
 
-def insert_postcard(details, template):
+def resolve_postcard_assets(details):
+    template = get_template_for_product(details["product_title"])
+    front_image_url = str(details.get("front_image_url", "") or "").strip()
+    back_image_url = str(details.get("back_image_url", "") or "").strip()
+
+    if front_image_url and back_image_url:
+        return {
+            "front": front_image_url,
+            "back": back_image_url,
+        }
+
+    if template is None:
+        return None
+
+    return {
+        "front": front_image_url or template["front"],
+        "back": back_image_url or template["back"],
+    }
+
+
+def insert_postcard(details, assets):
     db = get_db()
     order_id_candidates = build_order_id_candidates(details["order_id"])
     preferred_slug = build_preferred_postcard_slug(details)
@@ -1963,8 +2024,8 @@ def insert_postcard(details, template):
                     details["message"],
                     details["from_name"],
                     details["to_name"],
-                    template["front"],
-                    template["back"],
+                    assets["front"],
+                    assets["back"],
                     existing["id"],
                 ),
             )
@@ -1996,8 +2057,8 @@ def insert_postcard(details, template):
             details["message"],
             details["from_name"],
             details["to_name"],
-            template["front"],
-            template["back"],
+            assets["front"],
+            assets["back"],
             utc_now_iso(),
         ),
     )
@@ -2104,17 +2165,17 @@ def process_shopify_order_webhook():
             "order_name": details["order_name"],
         }), 200
 
-    template = get_template_for_product(details["product_title"])
-    if template is None:
+    assets = resolve_postcard_assets(details)
+    if assets is None:
         return jsonify({
             "ok": False,
-            "error": "Unknown product title",
+            "error": "Could not resolve postcard assets",
             "topic": source_topic,
             "product_title": details["product_title"],
             "order_id": details["order_id"],
         }), 200
 
-    slug = insert_postcard(details, template)
+    slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
 
     return jsonify({
