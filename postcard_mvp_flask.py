@@ -1,64 +1,34 @@
-from flask import Flask, request, jsonify, render_template_string, g, make_response
-import json
+from flask import Flask, request, jsonify, render_template_string, g
+import base64
 import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
 from textwrap import wrap
-import re
-import unicodedata
 
 app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
-PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
-
-POSTCARD_MESSAGE_STYLE = {
-    "desktop_font_size": "23px",
-    "tablet_font_size": "20px",
-    "mobile_font_size": "18px",
-    "font_family": '"Caveat", "Brush Script MT", cursive',
-    "font_weight": "600",
-    "color": "#6c4a30",
-    "line_height": "1.24",
-    "letter_spacing": "0.015em",
-    "rotation": "0deg",
-    "top": "35.2%",
-    "left": "52.8%",
-    "width": "34.5%",
-    "height": "30.5%",
-}
 
 TEMPLATES = {
     "Riva": {
-        "front": "https://sendamemory.store/cdn/shop/files/Panorama_Splita.jpg?v=1775754558&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
+        "front": "https://frostifymart.com/cdn/shop/files/Panorama_Splita.jpg?v=1775754558&width=1200",
+        "back": "https://frostifymart.com/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
     },
     "Peristil": {
-        "front": "https://sendamemory.store/cdn/shop/files/Peristil_65009f39-156f-4e41-a913-9e8d7896db8b.jpg?v=1775754568&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
+        "front": "https://frostifymart.com/cdn/shop/files/Peristil_65009f39-156f-4e41-a913-9e8d7896db8b.jpg?v=1775754568&width=1200",
+        "back": "https://frostifymart.com/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
     },
     "Cathedral of Saint Domnius": {
-        "front": "https://sendamemory.store/cdn/shop/files/Sv._Duje.jpg?v=1775754570&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
-    },"Adriatic View": {
-        "front": "https://sendamemory.store/cdn/shop/files/AdriaticView.jpg?v=1776011389&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
-    },
-    "Split From Above": {
-        "front": "https://sendamemory.store/cdn/shop/files/SplitFromAbove.jpg?v=1776011510&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
-    },
-    "Bell Tower of Split": {
-        "front":"https://sendamemory.store/cdn/shop/files/BellTowerofSplit.jpg?v=1776011445&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
+        "front": "https://frostifymart.com/cdn/shop/files/Sv._Duje.jpg?v=1775754570&width=1200",
+        "back": "https://frostifymart.com/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
     },
     "Old Town": {
-        "front": "https://sendamemory.store/cdn/shop/files/Varos_790dd52a-bf89-41bf-a21e-a377b559083a.jpg?v=1775763079&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
+        "front": "https://frostifymart.com/cdn/shop/files/Varos_790dd52a-bf89-41bf-a21e-a377b559083a.jpg?v=1775763079&width=1200",
+        "back": "https://frostifymart.com/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
     },
     "Bird View": {
-        "front": "https://sendamemory.store/cdn/shop/files/Splitizzraka.jpg?v=1775742362&width=1200",
-        "back": "https://sendamemory.store/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
+        "front": "https://frostifymart.com/cdn/shop/files/Splitizzraka.jpg?v=1775742362&width=1200",
+        "back": "https://frostifymart.com/cdn/shop/files/Split_Straznja_f5e126dd-f237-48d6-aa02-c74712f703c8.png?v=1775749874&width=1200",
     },
 }
 
@@ -70,28 +40,30 @@ VIEW_HTML = r"""
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ postcard['product_title'] }}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
     :root {
-      --bg-top: #fbf7f2;
-      --bg-mid: #efe6de;
-      --bg-bottom: #e7ddd6;
-      --ink: #2f2427;
-      --muted: rgba(47, 36, 39, 0.58);
+      --bg-top: #f7fbfd;
+      --bg-mid: #edf5f8;
+      --bg-bottom: #f5efe6;
+      --ink: #163142;
+      --muted: rgba(22, 49, 66, 0.64);
       --card-radius: 30px;
       --card-shadow: 0 38px 96px rgba(64, 94, 108, 0.16);
       --card-shadow-strong: 0 58px 140px rgba(44, 72, 89, 0.16);
       --glass: rgba(255, 255, 255, 0.7);
-      --panel-bg: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,248,238,0.68));
-      --panel-border: rgba(255,255,255,0.84);
-      --accent: #b78b4e;
-      --message-font-size: {{ message_style.desktop_font_size }};
-      --message-rotation: {{ message_style.rotation }};
+      --message-font-size: 18px;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
       --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
-      --drift-x: 0px;
-      --drift-y: 0px;
-      --tilt-x: 0deg;
-      --tilt-y: 0deg;
+      --ease-luxury: cubic-bezier(0.19, 1, 0.22, 1);
+      --ease-drift: cubic-bezier(0.33, 1, 0.68, 1);
+      --dur-fast: 0.72s;
+      --dur-base: 1.15s;
+      --dur-slow: 1.9s;
+      --dur-hero: 2.35s;
+      --stagger-step: 150ms;
+      --scroll-shift: 0px;
+      --pointer-x: 0px;
+      --pointer-y: 0px;
     }
 
     * {
@@ -104,11 +76,13 @@ VIEW_HTML = r"""
       font-family: "Manrope", Arial, sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at 50% 8%, rgba(234, 206, 163, 0.7), transparent 22%),
-        radial-gradient(circle at 22% 28%, rgba(247, 233, 213, 0.84), transparent 26%),
-        radial-gradient(circle at 82% 26%, rgba(222, 221, 233, 0.58), transparent 24%),
-        linear-gradient(180deg, #f9f4ec 0%, #f3eadf 26%, #e8ddd3 58%, #d8d2d2 82%, #8f98ae 100%);
-      overflow: hidden;
+        radial-gradient(circle at 50% 8%, rgba(255, 223, 135, 0.76), transparent 20%),
+        radial-gradient(circle at 22% 28%, rgba(255, 243, 209, 0.92), transparent 24%),
+        radial-gradient(circle at 82% 26%, rgba(255, 239, 204, 0.7), transparent 22%),
+        linear-gradient(180deg, #fffaf0 0%, #fff7df 24%, #f6f0e4 56%, #d6edf9 81%, #5b9fe2 100%);
+      overflow-x: hidden;
+      overflow-y: auto;
+      scroll-behavior: smooth;
     }
 
     body::before,
@@ -121,15 +95,19 @@ VIEW_HTML = r"""
 
     body::before {
       background:
-        radial-gradient(circle at 50% 12%, rgba(222, 194, 149, 0.28), transparent 26%),
+        radial-gradient(circle at 50% 12%, rgba(255, 214, 101, 0.32), transparent 24%),
         linear-gradient(180deg, rgba(255,255,255,0.18), transparent 42%);
       opacity: 1;
+      transform: translate3d(0, calc(var(--scroll-shift) * -0.18), 0);
+      transition: transform 0.2s linear;
     }
 
     body::after {
       background:
         radial-gradient(circle at center, transparent 0 54%, rgba(92, 145, 174, 0.1) 100%),
         linear-gradient(180deg, transparent 0%, transparent 74%, rgba(255,255,255,0.16) 100%);
+      transform: translate3d(0, calc(var(--scroll-shift) * 0.12), 0);
+      transition: transform 0.24s linear;
     }
 
     .sun-glow,
@@ -156,9 +134,14 @@ VIEW_HTML = r"""
       height: min(18vw, 190px);
       border-radius: 999px;
       background:
-        radial-gradient(circle, rgba(248, 236, 216, 0.96), rgba(213, 182, 131, 0.46) 42%, rgba(245, 226, 203, 0.08) 72%, transparent 76%);
+        radial-gradient(circle, rgba(255, 239, 180, 0.98), rgba(255, 224, 126, 0.54) 42%, rgba(255, 223, 127, 0.04) 72%, transparent 76%);
       filter: blur(34px);
       opacity: 0.98;
+      transform:
+        translateX(calc(-50% + (var(--pointer-x) * 0.012)))
+        translateY(calc(var(--pointer-y) * -0.01))
+        scale(1.02);
+      transition: transform 1.6s var(--ease-soft);
     }
 
     .sun-rays::before {
@@ -170,10 +153,14 @@ VIEW_HTML = r"""
       width: min(72vw, 880px);
       height: 34vh;
       background:
-        conic-gradient(from 180deg at 50% 0%, rgba(224, 193, 145, 0.16), rgba(255,255,255,0) 12%, rgba(226, 204, 170, 0.08) 22%, rgba(255,255,255,0) 34%, rgba(214, 205, 192, 0.06) 46%, rgba(255,255,255,0) 58%, rgba(223, 198, 165, 0.08) 70%, rgba(255,255,255,0) 82%, rgba(216, 190, 148, 0.14));
+        conic-gradient(from 180deg at 50% 0%, rgba(255, 225, 132, 0.18), rgba(255,255,255,0) 12%, rgba(255, 225, 132, 0.08) 22%, rgba(255,255,255,0) 34%, rgba(255, 225, 132, 0.06) 46%, rgba(255,255,255,0) 58%, rgba(255, 225, 132, 0.08) 70%, rgba(255,255,255,0) 82%, rgba(255, 225, 132, 0.16));
       clip-path: ellipse(54% 100% at 50% 0%);
       opacity: 0.55;
       filter: blur(1px);
+      transform:
+        translateX(calc(-50% + (var(--pointer-x) * 0.008)))
+        translateY(calc(var(--scroll-shift) * -0.12));
+      transition: transform 1.4s var(--ease-soft);
     }
 
     .sea-haze::before {
@@ -186,9 +173,13 @@ VIEW_HTML = r"""
       height: min(32vw, 360px);
       border-radius: 999px;
       background:
-        radial-gradient(circle, rgba(229, 220, 214, 0.34), rgba(229, 220, 214, 0.12) 58%, transparent 76%);
+        radial-gradient(circle, rgba(146, 216, 240, 0.38), rgba(146, 216, 240, 0.12) 58%, transparent 76%);
       filter: blur(56px);
       opacity: 0.8;
+      transform:
+        translateX(calc(-50% + (var(--pointer-x) * -0.01)))
+        translateY(calc(var(--scroll-shift) * 0.18));
+      transition: transform 1.6s var(--ease-soft);
     }
 
     .sea-shimmer::before {
@@ -204,6 +195,10 @@ VIEW_HTML = r"""
       clip-path: polygon(47% 0%, 60% 26%, 72% 52%, 82% 100%, 18% 100%, 28% 52%, 40% 26%);
       filter: blur(10px);
       opacity: 0.72;
+      transform:
+        translateX(calc(-50% + (var(--pointer-x) * 0.016)))
+        translateY(calc(var(--scroll-shift) * 0.22));
+      transition: transform 1.5s var(--ease-soft);
     }
 
     .brand-bar {
@@ -228,7 +223,7 @@ VIEW_HTML = r"""
     .coast-waves::before {
       height: 24vh;
       background:
-        linear-gradient(180deg, rgba(229, 221, 216, 0.18), rgba(168, 154, 145, 0.72));
+        linear-gradient(180deg, rgba(188, 227, 248, 0.18), rgba(138, 194, 236, 0.74));
       clip-path: ellipse(74% 62% at 50% 100%);
       opacity: 0.95;
     }
@@ -236,7 +231,7 @@ VIEW_HTML = r"""
     .coast-waves::after {
       height: 17vh;
       background:
-        linear-gradient(180deg, rgba(140, 150, 176, 0.88), rgba(89, 95, 118, 0.98));
+        linear-gradient(180deg, rgba(95, 164, 226, 0.88), rgba(39, 111, 189, 0.98));
       clip-path: ellipse(82% 78% at 50% 100%);
     }
 
@@ -311,7 +306,7 @@ VIEW_HTML = r"""
       background: rgba(88, 124, 141, 0.18);
       filter: blur(30px);
       opacity: 0;
-      transition: opacity 1s ease, transform 1.2s var(--ease);
+      transition: opacity 1.4s ease, transform 1.8s var(--ease-soft);
     }
 
     body.is-ready .stage-shadow::before {
@@ -324,186 +319,61 @@ VIEW_HTML = r"""
       min-height: 100vh;
       display: grid;
       place-items: center;
-      padding: 24px 20px 108px;
+      padding: 20px 20px 96px;
       z-index: 1;
-    }
-
-    .experience::before {
-      content: "";
-      position: absolute;
-      inset: 5vh 8vw auto;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
-      opacity: 0.55;
-      pointer-events: none;
     }
 
     .brand-mark {
       position: fixed;
       top: 18px;
       left: 50%;
-      transform: translateX(-50%) translateY(-10px) scale(0.96);
-      display: inline-flex;
+      transform: translateX(-50%) translateY(-16px) scale(0.94);
+      display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      min-width: min(36vw, 220px);
-      min-height: 54px;
-      padding: 12px 18px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,250,239,0.8));
-      border: 1px solid rgba(255,255,255,0.92);
-      box-shadow: 0 18px 42px rgba(111, 141, 156, 0.14);
-      backdrop-filter: blur(14px);
+      width: min(34vw, 190px);
       opacity: 0;
-      transition: opacity 0.9s ease, transform 1.1s var(--ease);
+      transition: opacity 1.45s ease, transform 1.8s var(--ease-luxury), filter 1.4s ease;
       z-index: 2;
+      filter: blur(12px);
     }
 
     .brand-mark img {
-      width: min(34vw, 184px);
-      max-height: 34px;
+      width: 100%;
       height: auto;
-      object-fit: contain;
       display: block;
       filter:
-        drop-shadow(0 10px 28px rgba(173, 136, 74, 0.16))
-        drop-shadow(0 2px 8px rgba(255, 255, 255, 0.28));
+        drop-shadow(0 10px 28px rgba(255, 190, 90, 0.18))
+        drop-shadow(0 2px 8px rgba(255, 255, 255, 0.34));
     }
 
-    .brand-mark-fallback {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      color: rgba(45, 36, 38, 0.94);
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-    }
-
-    .brand-mark-fallback::before {
-      content: "";
-      width: 12px;
-      height: 12px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 35% 35%, #fbf1dc, #d3b173 58%, #a67c3d 100%);
-      box-shadow: 0 0 0 6px rgba(183, 139, 78, 0.18);
-    }
-
-    .brand-mark.is-fallback img {
-      display: none;
-    }
-
-    .brand-mark.is-fallback .brand-mark-fallback {
-      display: inline-flex;
-    }
-
-    body.reveal-active .brand-mark,
     body.is-ready .brand-mark {
       opacity: 1;
       transform: translateX(-50%) translateY(0) scale(1);
-    }
-
-    .scene-layout {
-      position: relative;
-      width: min(100%, 1100px);
-      display: grid;
-      grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(150px, 190px);
-      gap: clamp(18px, 3vw, 32px);
-      align-items: center;
-      margin-top: 34px;
-    }
-
-    .story-stop {
-      min-width: 0;
-      display: grid;
-      gap: 6px;
-      padding: 0;
-      background: none;
-      border: 0;
-      box-shadow: none;
-      backdrop-filter: none;
-      opacity: 0;
-      transform: translateY(16px);
-      transition: opacity 0.9s ease, transform 1s var(--ease);
-      position: relative;
-    }
-
-    .story-stop-label {
-      display: block;
-      margin-bottom: 2px;
-      font-size: 8px;
-      font-weight: 700;
-      letter-spacing: 0.24em;
-      text-transform: uppercase;
-      color: rgba(113, 101, 86, 0.72);
-    }
-
-    .story-stop-name {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(21px, 2.2vw, 29px);
-      line-height: 1.02;
-      color: rgba(77, 55, 40, 0.94);
-      letter-spacing: 0.01em;
-    }
-
-    .story-stop-meta {
-      font-size: 10px;
-      line-height: 1.4;
-      color: rgba(119, 105, 88, 0.68);
-    }
-
-    .story-stop::before {
-      content: "";
-      position: absolute;
-      top: 50%;
-      width: 42px;
-      height: 1px;
-      background: linear-gradient(90deg, rgba(186, 162, 126, 0), rgba(186, 162, 126, 0.9));
-      opacity: 0.85;
-    }
-
-    .story-stop-from {
-      text-align: right;
-      justify-self: end;
-      padding-right: 58px;
-    }
-
-    .story-stop-to {
-      text-align: left;
-      justify-self: start;
-      padding-left: 58px;
-    }
-
-    .story-stop-from::before {
-      right: 0;
-      transform: translateY(-50%);
-    }
-
-    .story-stop-to::before {
-      left: 0;
-      transform: translateY(-50%) scaleX(-1);
-    }
-
-    body.reveal-active .story-stop,
-    body.is-ready .story-stop {
-      opacity: 1;
-      transform: translateY(0);
+      filter: blur(0);
     }
 
     .scene {
       position: relative;
-      width: min(80vw, 620px);
+      width: min(82vw, 660px);
       aspect-ratio: 3 / 2;
       display: grid;
       place-items: center;
       perspective: 2200px;
-      margin-top: 0;
-      justify-self: center;
+      transform: translateY(calc(var(--scroll-shift) * -0.08));
+      transition: transform 0.28s linear;
+    }
+
+    .experience::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 250, 242, 0);
+      backdrop-filter: blur(0px);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+      transition: opacity 0.9s ease, backdrop-filter 0.9s ease, background 0.9s ease;
     }
 
     .scene::before {
@@ -514,177 +384,243 @@ VIEW_HTML = r"""
       background:
         radial-gradient(circle at 50% 18%, rgba(255, 244, 214, 0.58), rgba(255,255,255,0) 52%),
         linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0));
-      filter: blur(10px);
-      opacity: 0.9;
+      filter: blur(16px);
+      opacity: 0.82;
       pointer-events: none;
+      transition: opacity var(--dur-slow) ease, transform var(--dur-slow) var(--ease-soft);
+      transform: scale(0.96);
     }
 
-    .scene::after {
-      content: "";
+    .envelope-stage {
       position: absolute;
-      inset: -4.5% -5.5%;
-      border-radius: 42px;
-      background: none;
-      border: 1px solid rgba(255, 247, 233, 0.42);
-      box-shadow:
-        0 18px 46px rgba(92, 75, 51, 0.09),
-        0 0 0 10px rgba(255, 250, 242, 0.12);
-      filter: blur(14px);
-      opacity: 0.42;
-      transform: translateY(10px) scale(0.985);
-      transition: opacity 1.1s ease, transform 1.1s var(--ease), box-shadow 1.1s ease;
-      pointer-events: none;
-    }
-
-    body.reveal-active .scene::after,
-    body.is-ready .scene::after {
-      opacity: 0.62;
-      transform: translateY(0) scale(1);
-    }
-
-    .reveal-halo,
-    .reveal-flash,
-    .reveal-sweep {
-      position: absolute;
+      inset: 7% 6%;
+      z-index: 2;
       pointer-events: none;
       opacity: 0;
-      transition: opacity 1.2s ease, transform 1.4s var(--ease-soft), filter 1.2s ease;
+      transform: translate3d(0, -116px, -88px) scale(0.86) rotateX(13deg);
+      transform-style: preserve-3d;
+      transition: opacity 0.95s ease, transform 1.9s var(--ease-luxury), filter 1.5s ease;
+      filter: blur(16px);
     }
 
-    .reveal-halo {
-      width: min(68vw, 620px);
-      aspect-ratio: 1;
+    .envelope-shadow {
+      position: absolute;
+      left: 50%;
+      bottom: 1.5%;
+      width: 76%;
+      height: 14%;
+      transform: translateX(-50%) scale(0.76);
       border-radius: 999px;
-      border: 1px solid rgba(220, 188, 118, 0.24);
-      mask-image: radial-gradient(circle at center, transparent 57%, black 58%, black 61%, transparent 62%);
-      transform: scale(0.88);
-      filter: drop-shadow(0 0 28px rgba(192, 154, 99, 0.2));
-    }
-
-    .reveal-flash {
-      width: min(72vw, 580px);
-      height: min(26vw, 170px);
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(255,248,233,0.92), rgba(255, 224, 163, 0.16) 50%, transparent 72%);
+      background: rgba(72, 95, 108, 0.2);
       filter: blur(20px);
-      transform: scale(0.8);
+      opacity: 0;
+      transition: opacity var(--dur-base) ease, transform var(--dur-slow) var(--ease-soft);
     }
 
-    .reveal-sweep {
-      width: min(110vw, 1200px);
-      height: 180px;
-      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 26%, rgba(255,244,214,0.82) 50%, rgba(255,255,255,0.08) 74%, transparent 100%);
-      filter: blur(18px);
-      transform: translateX(-34%) translateY(-10px) rotate(-9deg) scaleX(0.88);
-      mix-blend-mode: screen;
-    }
-
-    .ambient-orbs {
+    .envelope {
       position: absolute;
-      inset: 4% 8% 10%;
+      inset: 0;
+      overflow: visible;
+    }
+
+    .envelope-stage,
+    .emerge-card {
+      display: none !important;
+    }
+
+    .envelope-art,
+    .envelope-front-cover {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
       pointer-events: none;
     }
 
-    .ambient-orbs span {
-      position: absolute;
+    .envelope-art {
+      z-index: 1;
+    }
+
+    .envelope-art img,
+    .envelope-front-cover img {
+      width: 100%;
+      height: 100%;
       display: block;
-      border-radius: 999px;
-      background: radial-gradient(circle, rgba(248, 239, 224, 0.94), rgba(196, 167, 117, 0.2) 58%, transparent 72%);
-      filter: blur(2px);
+      object-fit: contain;
+      filter: drop-shadow(0 28px 40px rgba(44, 6, 10, 0.2));
+    }
+
+    .envelope-front-cover {
+      z-index: 4;
+    }
+
+    .envelope-front-cover.bottom {
+      clip-path: polygon(9% 100%, 91% 100%, 80% 62%, 60% 52%, 40% 52%, 20% 62%);
+    }
+
+    .envelope-front-cover.left {
+      clip-path: polygon(9% 43%, 50% 72%, 50% 52%, 21% 43%);
+    }
+
+    .envelope-front-cover.right {
+      clip-path: polygon(50% 52%, 50% 72%, 91% 43%, 79% 43%);
+    }
+
+    .envelope-liner {
+      display: none;
+    }
+
+    .envelope-side-fold {
+      display: none;
+    }
+
+    .envelope-side-fold.left {
+      display: none;
+    }
+
+    .envelope-side-fold.right {
+      display: none;
+    }
+
+    .envelope-center-fold {
+      display: none;
+    }
+
+    .envelope-recipient,
+    .envelope-letter,
+    .envelope-postcard,
+    .envelope-postcard-shine {
+      display: none;
+    }
+
+    .envelope-flap {
+      display: none;
+    }
+
+    .envelope-flap::before {
+      display: none;
+    }
+
+    .envelope-flap::after {
+      display: none;
+    }
+
+    .envelope-seal {
+      display: none;
+    }
+
+    .envelope-seal::before {
+      display: none;
+    }
+
+    .arrival-glow {
+      position: absolute;
+      inset: -12%;
+      z-index: 1;
       opacity: 0;
-      transition: opacity 1s ease;
-      animation: orbFloat 6.2s ease-in-out infinite;
+      background:
+        radial-gradient(circle at 50% 52%, rgba(255, 242, 204, 0.58), rgba(255, 224, 163, 0.14) 42%, transparent 68%);
+      filter: blur(28px);
+      transform: scale(0.84);
+      transition: opacity 1.5s ease, transform 2s var(--ease-soft), filter 1.7s ease;
     }
 
-    .ambient-orbs span:nth-child(1) {
-      top: 8%;
-      left: 10%;
-      width: 18px;
-      height: 18px;
-      animation-delay: 0s;
+    body.reveal-start .envelope-stage {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate3d(0, 0, 0) scale(1) rotateX(0deg);
     }
 
-    .ambient-orbs span:nth-child(2) {
-      right: 12%;
-      top: 18%;
-      width: 14px;
-      height: 14px;
-      animation-delay: 1.2s;
+    body.reveal-start .arrival-glow {
+      opacity: 0.9;
+      transform: scale(1.04);
+      filter: blur(22px);
     }
 
-    .ambient-orbs span:nth-child(3) {
-      left: 20%;
-      bottom: 20%;
-      width: 10px;
-      height: 10px;
-      animation-delay: 2.1s;
+    body.reveal-start .envelope-flap {
+      transform: rotateX(-158deg);
+      filter: blur(0.2px);
     }
 
-    body.reveal-active .reveal-halo,
-    body.reveal-active .reveal-flash,
-    body.reveal-active .reveal-sweep,
-    body.is-ready .reveal-halo,
-    body.is-ready .reveal-flash,
-    body.is-ready .reveal-sweep,
-    body.reveal-active .ambient-orbs span,
-    body.is-ready .ambient-orbs span {
+    body.reveal-start .envelope-seal {
+      opacity: 0;
+      transform: translateX(-50%) scale(0.82);
+      filter: blur(4px);
+    }
+
+    body.reveal-start .envelope-letter {
       opacity: 1;
     }
 
-    body.reveal-active .reveal-halo,
-    body.is-ready .reveal-halo {
-      transform: scale(1);
-      animation: haloPulse 5.8s ease-in-out infinite;
+    body.reveal-start .envelope-postcard {
+      transform: translateX(-50%) translateY(-8%) scale(0.94);
     }
 
-    body.reveal-active .reveal-flash,
-    body.is-ready .reveal-flash {
-      transform: scale(1);
+    body.reveal-start .envelope-postcard-shine {
+      transform: translateX(6%);
     }
 
-    body.reveal-active .reveal-sweep {
-      animation: revealSweep 1.35s var(--ease) forwards;
+    body.reveal-active .envelope-stage {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate3d(0, 0, 0) scale(1) rotateX(0deg);
     }
 
-    body.is-ready .reveal-sweep {
+    body.is-ready .envelope-stage {
       opacity: 0;
-      transform: translateX(44%) translateY(-20px) rotate(-7deg) scaleX(1.06);
+      filter: blur(10px);
+      transform: translate3d(0, 20px, -24px) scale(0.94);
     }
 
     .postcard-shell {
-      position: relative;
-      width: 100%;
-      height: 100%;
+      position: absolute;
+      inset: 8% 6%;
+      aspect-ratio: 3 / 2;
+      height: auto;
+      z-index: 5;
       opacity: 0;
-      filter: blur(16px);
+      filter: blur(10px);
+      visibility: visible;
+      pointer-events: none;
+      transform-origin: center center;
       transform:
-        translate3d(0, 72px, -90px)
-        scale(0.9)
-        rotateX(12deg);
+        translate3d(0, 30px, 0)
+        scale(0.96)
+        rotateX(0deg);
       transform-style: preserve-3d;
-      transition: opacity 1.2s ease, filter 1.25s ease, transform 1.75s var(--ease), box-shadow 1s ease;
-      will-change: transform;
+      transition: opacity 0.55s ease, filter 0.55s ease, transform 0.9s var(--ease-luxury);
     }
 
     .postcard-shell::before {
       content: "";
       position: absolute;
-      inset: -5% -3%;
+      inset: -8% -5%;
       border-radius: 40px;
-      background: radial-gradient(circle at 50% 40%, rgba(255, 244, 214, 0.3), transparent 62%);
+      background:
+        radial-gradient(circle at 50% 40%, rgba(255, 244, 214, 0.42), rgba(255,255,255,0.12) 34%, transparent 66%);
       opacity: 0;
-      filter: blur(16px);
-      transition: opacity 1.2s ease;
+      filter: blur(28px);
+      transition: opacity 2s ease, transform 2.2s var(--ease-soft);
       pointer-events: none;
+      transform: scale(0.88);
     }
 
     body.reveal-start .postcard-shell {
-      opacity: 0.54;
-      filter: blur(8px);
+      opacity: 0;
+      filter: blur(10px);
       transform:
-        translate3d(0, 24px, -26px)
+        translate3d(0, 30px, 0)
         scale(0.96)
-        rotateX(5deg);
+        rotateX(0deg);
+    }
+
+    body.delivery-drop .postcard-shell {
+      opacity: 0;
+      filter: blur(12px);
+      transform:
+        translate3d(0, 42px, 0)
+        scale(0.94)
+        rotateX(0deg);
     }
 
     body.reveal-active .postcard-shell {
@@ -692,24 +628,36 @@ VIEW_HTML = r"""
       filter: blur(0);
       transform:
         translate3d(0, -8px, 0)
-        scale(1.018)
+        scale(1.01)
         rotateX(0deg);
     }
 
     body.reveal-active .postcard-shell::before,
     body.is-ready .postcard-shell::before {
       opacity: 1;
+      transform: scale(1);
     }
 
     body.is-ready .postcard-shell {
       opacity: 1;
       filter: blur(0);
-      transform:
-        translate3d(var(--drift-x), calc(var(--drift-y) * 0.45), 0)
-        scale(1.01)
-        rotateX(var(--tilt-x))
-        rotateY(var(--tilt-y));
-      animation: postcardFloat 6.8s ease-in-out infinite;
+      pointer-events: auto;
+      transform: translate3d(0, 0, 0) scale(1) rotateX(0deg);
+      z-index: 5;
+      animation: postcardFloat 5.8s ease-in-out infinite;
+    }
+
+    body.reveal-start .scene::before,
+    body.reveal-active .scene::before,
+    body.is-ready .scene::before {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    body.is-ready .experience::after {
+      opacity: 0;
+      background: rgba(255, 255, 255, 0);
+      backdrop-filter: blur(0px);
     }
 
     .flip-target {
@@ -733,42 +681,26 @@ VIEW_HTML = r"""
 
     .card-glow {
       position: absolute;
-      inset: -18px;
-      border-radius: calc(var(--card-radius) + 18px);
-      background: none;
-      box-shadow:
-        0 0 0 1px rgba(255, 244, 221, 0.24),
-        0 18px 42px rgba(96, 79, 54, 0.12),
-        0 0 28px rgba(239, 220, 183, 0.14);
-      filter: blur(10px);
-      opacity: 0.74;
+      inset: -16px;
+      border-radius: calc(var(--card-radius) + 14px);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.52), rgba(255, 231, 193, 0.12) 38%, transparent 72%);
+      filter: blur(14px);
+      opacity: 0.82;
       transform: translateZ(-8px);
-      transition: opacity 0.55s ease, filter 0.55s ease, transform 0.8s ease;
+    }
+
+    body.is-ready .card-glow {
+      animation: glowPulse 4.8s ease-in-out infinite;
     }
 
     .card-glow::before {
       content: "";
       position: absolute;
       inset: 8px;
-      border-radius: calc(var(--card-radius) + 6px);
-      border: 1px solid rgba(255, 244, 221, 0.44);
-      opacity: 0.62;
-    }
-
-    .card-glow::after {
-      content: "";
-      position: absolute;
-      inset: -2px;
-      border-radius: calc(var(--card-radius) + 14px);
-      box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,0.14),
-        0 22px 54px rgba(102, 86, 58, 0.06);
-      opacity: 0.82;
-    }
-
-    .flip-target:hover .card-glow {
-      opacity: 0.86;
-      filter: blur(12px);
+      border-radius: calc(var(--card-radius) + 4px);
+      border: 1px solid rgba(255, 243, 218, 0.46);
+      opacity: 0.72;
     }
 
     .postcard {
@@ -776,7 +708,7 @@ VIEW_HTML = r"""
       width: 100%;
       height: 100%;
       transform-style: preserve-3d;
-      transition: transform 1.06s var(--ease);
+      transition: transform 1.45s var(--ease-luxury);
       will-change: transform;
     }
 
@@ -793,7 +725,7 @@ VIEW_HTML = r"""
     }
 
     body.reveal-active .postcard::after {
-      animation: postcardGleam 1.45s var(--ease) 0.18s forwards;
+      animation: postcardGleam 2.4s var(--ease-luxury) 0.65s forwards;
     }
 
     .postcard.flipped {
@@ -862,62 +794,22 @@ VIEW_HTML = r"""
     .message-area {
       position: absolute;
       z-index: 1;
-      top: {{ message_style.top }};
-      left: {{ message_style.left }};
-      width: {{ message_style.width }};
-      height: {{ message_style.height }};
+      top: 49.6%;
+      left: 53.3%;
+      width: 38.6%;
+      height: 17.8%;
       overflow: hidden;
-      display: flex;
-      align-items: flex-start;
-      justify-content: flex-start;
-      padding-right: 2%;
+      display: block;
     }
 
     .message-lines {
+      display: none;
+    }
+
+    .message-canvas {
       width: 100%;
-      display: grid;
-      gap: 0.2em;
-      text-align: left;
-      align-content: start;
-      font-family: {{ message_style.font_family|safe }};
-      font-size: var(--message-font-size);
-      line-height: {{ message_style.line_height }};
-      letter-spacing: {{ message_style.letter_spacing }};
-      font-weight: {{ message_style.font_weight }};
-      color: {{ message_style.color }};
-      text-shadow: 0 1px 0 rgba(255,255,255,0.12);
-      transform-origin: top left;
-      transform: rotate(var(--message-rotation));
-      filter: saturate(0.92);
-    }
-
-    .message-line {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: clip;
-      padding-left: 0.08em;
-    }
-
-    .message-line:nth-child(2) {
-      padding-left: 0.34em;
-    }
-
-    .message-line:nth-child(3) {
-      padding-left: 0.18em;
-    }
-
-    @keyframes revealSweep {
-      0% {
-        opacity: 0;
-        transform: translateX(-34%) translateY(-10px) rotate(-9deg) scaleX(0.88);
-      }
-      18% {
-        opacity: 0.9;
-      }
-      100% {
-        opacity: 0;
-        transform: translateX(40%) translateY(-18px) rotate(-7deg) scaleX(1.08);
-      }
+      height: 100%;
+      display: block;
     }
 
     @keyframes postcardGleam {
@@ -935,76 +827,124 @@ VIEW_HTML = r"""
     }
 
     @keyframes postcardFloat {
-      0%, 100% {
-        transform:
-          translate3d(var(--drift-x), calc(var(--drift-y) * 0.45), 0)
-          scale(1.01)
-          rotateX(var(--tilt-x))
-          rotateY(var(--tilt-y));
-      }
-      50% {
-        transform:
-          translate3d(calc(var(--drift-x) + 1px), calc(var(--drift-y) * 0.45 - 8px), 0)
-          scale(1.016)
-          rotateX(calc(var(--tilt-x) - 0.35deg))
-          rotateY(calc(var(--tilt-y) + 0.25deg));
-      }
-    }
-
-    @keyframes haloPulse {
-      0%, 100% {
-        opacity: 0.62;
-        filter: drop-shadow(0 0 26px rgba(192, 154, 99, 0.18));
-      }
-      50% {
-        opacity: 0.92;
-        filter: drop-shadow(0 0 44px rgba(192, 154, 99, 0.3));
-      }
-    }
-
-    @keyframes orbFloat {
-      0%, 100% {
+      0% {
         transform: translate3d(0, 0, 0) scale(1);
       }
       50% {
-        transform: translate3d(0, -12px, 0) scale(1.08);
+        transform: translate3d(0, -8px, 0) scale(1.003);
+      }
+      100% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    @keyframes glowPulse {
+      0% {
+        opacity: 0.72;
+        filter: blur(14px);
+      }
+      50% {
+        opacity: 0.88;
+        filter: blur(16px);
+      }
+      100% {
+        opacity: 0.72;
+        filter: blur(14px);
       }
     }
 
     .controls {
       position: fixed;
       left: 50%;
-      bottom: 20px;
-      transform: translateX(-50%) translateY(8px);
-      width: min(78vw, 332px);
+      bottom: 18px;
+      transform: translateX(-50%) translateY(18px);
+      width: min(82vw, 660px);
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 12px 14px;
-      border-radius: 999px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.88), rgba(248,242,232,0.72));
-      border: 1px solid rgba(255,255,255,0.86);
-      box-shadow:
-        0 22px 48px rgba(90, 112, 126, 0.14),
-        inset 0 1px 0 rgba(255,255,255,0.72);
-      backdrop-filter: blur(16px);
+      gap: 12px;
       opacity: 0;
-      transition: opacity 0.85s ease, transform 1s var(--ease-soft), box-shadow 0.4s ease;
-      z-index: 2;
+      filter: blur(10px);
+      transition: opacity 1.35s ease, transform 1.45s var(--ease-soft), filter 1.25s ease;
     }
 
+    body.awaiting-open .controls,
     body.is-ready .controls {
       opacity: 1;
       transform: translateX(-50%) translateY(0);
+      filter: blur(0);
+    }
+
+    body.awaiting-open .actions {
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+    }
+
+    body.is-ready .actions {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,250,242,0.68));
+      border: 1px solid rgba(255,255,255,0.86);
+      color: rgba(78, 94, 102, 0.82);
+      box-shadow: 0 12px 24px rgba(145, 184, 198, 0.12);
+      backdrop-filter: blur(12px);
+      font-size: 9px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      transition: transform 0.45s var(--ease-soft), box-shadow 0.45s ease, background 0.45s ease;
+    }
+
+    .hint::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #fffdf8, #f0d18d);
+      box-shadow: 0 0 14px rgba(245, 206, 113, 0.66);
     }
 
     .actions {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      justify-content: center;
-      width: 100%;
+      justify-content: flex-end;
+      transition: opacity 0.6s ease, transform 0.8s var(--ease-soft);
+    }
+
+    body.awaiting-open .scene {
+      cursor: default;
+    }
+
+    .reveal-item {
+      opacity: 0;
+      filter: blur(14px);
+      transform: translate3d(0, 34px, 0) scale(0.982);
+      transition:
+        opacity var(--dur-base) ease,
+        transform var(--dur-slow) var(--ease-luxury),
+        filter var(--dur-base) ease;
+      transition-delay: calc(var(--reveal-order, 0) * var(--stagger-step));
+      will-change: opacity, transform, filter;
+    }
+
+    .reveal-item.is-visible {
+      opacity: 1;
+      filter: blur(0);
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    .reveal-item.reveal-soft {
+      transform: translate3d(0, 18px, 0) scale(0.992);
     }
 
     .button {
@@ -1017,24 +957,41 @@ VIEW_HTML = r"""
       font-weight: 700;
       letter-spacing: 0.24em;
       text-transform: uppercase;
-      transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+      transition: transform 0.4s var(--ease-soft), background 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
     }
 
     .button:hover {
-      transform: translateY(-1px);
+      transform: translateY(-2px) scale(1.01);
+    }
+
+    .button-primary {
+      border: 1px solid rgba(255,255,255,0.9);
+      background: rgba(255,255,255,0.76);
+      color: rgba(47, 80, 93, 0.92);
+      box-shadow: 0 16px 34px rgba(133, 176, 192, 0.16);
     }
 
     .button-secondary {
-      border: 1px solid rgba(169, 144, 93, 0.32);
-      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(243,235,223,0.82));
-      color: rgba(60, 56, 50, 0.9);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 14px 28px rgba(98, 83, 54, 0.1);
+      border: 1px solid rgba(214, 190, 144, 0.28);
+      background: linear-gradient(180deg, rgba(255,255,255,0.52), rgba(255,244,226,0.32));
+      color: rgba(97, 101, 96, 0.86);
+      box-shadow: 0 10px 22px rgba(201, 170, 103, 0.08);
       backdrop-filter: blur(10px);
     }
 
-    .button-secondary:hover {
-      background: linear-gradient(180deg, rgba(255,255,255,1), rgba(245,237,224,0.88));
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 14px 28px rgba(98, 83, 54, 0.14);
+    .button-secondary:hover,
+    .hint:hover {
+      box-shadow: 0 18px 34px rgba(201, 170, 103, 0.14);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      body.is-ready .postcard-shell:hover {
+        transform: translate3d(0, 12px, 0) scale(1.64) rotateX(0deg);
+      }
+
+      body.is-ready .scene:hover {
+        transform: translateY(calc(var(--scroll-shift) * -0.08)) scale(1.003);
+      }
     }
 
     @media (max-width: 760px) {
@@ -1043,71 +1000,28 @@ VIEW_HTML = r"""
         padding: 12px 10px 56px;
       }
 
-      .scene-layout {
-        width: min(92vw, 860px);
-        grid-template-columns: 1fr 1fr;
-        grid-template-areas:
-          "from to"
-          "scene scene";
-        gap: 12px;
-        margin-top: 70px;
-      }
-
       .brand-mark {
-        top: 10px;
-        min-width: min(56vw, 220px);
-        padding: 10px 14px;
-      }
-
-      .story-stop {
-        gap: 5px;
-      }
-
-      .story-stop::before {
-        width: 28px;
-      }
-
-      .story-stop-from {
-        grid-area: from;
-        justify-self: stretch;
-        text-align: left;
-        padding-right: 0;
-        padding-left: 34px;
-      }
-
-      .story-stop-to {
-        grid-area: to;
-        justify-self: stretch;
-        text-align: right;
-        padding-left: 0;
-        padding-right: 34px;
-      }
-
-      .story-stop-from::before {
-        left: 0;
-        right: auto;
-        transform: translateY(-50%) scaleX(-1);
-      }
-
-      .story-stop-to::before {
-        left: auto;
-        right: 0;
-        transform: translateY(-50%);
+        top: 8px;
+        width: min(42vw, 156px);
       }
 
       .scene {
-        grid-area: scene;
-        width: min(92vw, calc((100svh - 220px) * 1.5), 620px);
+        width: min(92vw, calc((100svh - 190px) * 1.5), 620px);
       }
 
       .controls {
-        width: min(92vw, 420px);
+        width: min(92vw, 620px);
       }
 
       .controls {
         position: static;
         transform: none;
-        margin-top: 10px;
+        margin-top: 8px;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
       }
 
       body.is-ready .controls {
@@ -1124,13 +1038,11 @@ VIEW_HTML = r"""
         font-size: 9px;
         letter-spacing: 0.2em;
       }
-    }
 
-    @media (max-width: 900px) and (min-width: 561px) {
-      .message-lines {
-        font-size: {{ message_style.tablet_font_size }};
-        line-height: 1.18;
-        gap: 0.18em;
+      .hint {
+        padding: 9px 12px;
+        font-size: 8px;
+        letter-spacing: 0.18em;
       }
     }
 
@@ -1140,40 +1052,12 @@ VIEW_HTML = r"""
       }
 
       .brand-mark {
-        top: 8px;
-        min-width: min(58vw, 208px);
-      }
-
-      .scene-layout {
-        width: min(96vw, 520px);
-        grid-template-columns: 1fr;
-        grid-template-areas:
-          "from"
-          "scene"
-          "to";
-        gap: 10px;
-        margin-top: 74px;
-      }
-
-      .story-stop {
-        text-align: left;
-        padding-left: 28px;
-        padding-right: 0;
-      }
-
-      .story-stop::before {
-        left: 0;
-        right: auto;
-        width: 24px;
-        transform: translateY(-50%) scaleX(-1);
-      }
-
-      .story-stop-to {
-        text-align: left;
+        top: 6px;
+        width: min(40vw, 140px);
       }
 
       .scene {
-        width: min(96vw, calc((100svh - 205px) * 1.5), 520px);
+        width: min(96vw, calc((100svh - 165px) * 1.5), 520px);
       }
 
       .controls {
@@ -1182,32 +1066,27 @@ VIEW_HTML = r"""
       }
 
       .message-area {
-        top: {{ message_style.top }};
-        left: {{ message_style.left }};
-        width: {{ message_style.width }};
-        height: {{ message_style.height }};
+        top: 49.8%;
+        left: 53.4%;
+        width: 38.6%;
+        height: 17.6%;
       }
 
       .message-lines {
-        font-size: {{ message_style.mobile_font_size }};
-        line-height: 1.16;
-        gap: 0.16em;
+        font-size: 11.5px;
+        line-height: 1.86;
+        gap: 0.5em;
       }
     }
 
     @media (max-height: 760px) and (max-width: 760px) {
       .brand-mark {
-        top: 8px;
-        min-width: min(62vw, 210px);
-      }
-
-      .scene-layout {
-        width: min(90vw, 480px);
-        margin-top: 62px;
+        top: 4px;
+        width: min(36vw, 124px);
       }
 
       .scene {
-        width: min(90vw, calc((100svh - 190px) * 1.5), 480px);
+        width: min(90vw, calc((100svh - 150px) * 1.5), 480px);
       }
 
       .controls {
@@ -1229,12 +1108,25 @@ VIEW_HTML = r"""
       html, body {
         overflow-y: auto;
       }
+
+      .reveal-item,
+      .reveal-item.is-visible,
+      .brand-mark,
+      .controls,
+      .scene,
+      body::before,
+      body::after,
+      .sun-glow::before,
+      .sun-rays::before,
+      .sea-haze::before,
+      .sea-shimmer::before {
+        transform: none !important;
+        filter: none !important;
+      }
     }
   </style>
 </head>
 <body>
-  {% set sender_name = postcard['from_name']|default('', true)|trim %}
-  {% set recipient_name = postcard['to_name']|default('', true)|trim %}
   <div class="sun-glow"></div>
   <div class="sun-rays"></div>
   <div class="sea-haze"></div>
@@ -1244,67 +1136,75 @@ VIEW_HTML = r"""
   <div class="coastline"></div>
   <div class="coast-waves"></div>
   <div class="stage-shadow"></div>
-
   <main class="experience">
-    <div class="brand-mark" id="brandMark" aria-hidden="true">
-      <img src="/static/send-a-memory-logo.png" alt="Send a Memory" id="brandLogo">
-      <span class="brand-mark-fallback">Send a Memory</span>
+    <div class="brand-mark reveal-item" data-reveal data-reveal-order="0" aria-hidden="true">
+      <img src="{{ logo_src }}" alt="Send a Memory">
     </div>
-    <div class="scene-layout">
-      <aside class="story-stop story-stop-from" aria-label="Postcard sender">
-        <div>
-          <span class="story-stop-label">From</span>
-          <span class="story-stop-name">{{ sender_name or 'A traveler' }}</span>
-        </div>
-        <div class="story-stop-meta">Sent from Split, Croatia</div>
-      </aside>
-
-      <section class="scene" aria-label="Digital postcard reveal scene">
-        <div class="reveal-halo"></div>
-        <div class="reveal-flash"></div>
-        <div class="reveal-sweep"></div>
-        <div class="ambient-orbs" aria-hidden="true">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-
-        <div class="postcard-shell" id="postcardShell">
-          <button class="flip-target" id="flipButton" aria-label="Okreni razglednicu">
-            <div class="card-glow"></div>
-
-            <div class="postcard" id="postcard">
-              <article class="face front">
-                <img src="{{ postcard['front_image_url'] }}" alt="Front image">
-              </article>
-
-              <article class="face back">
-                <img src="{{ postcard['back_image_url'] }}" alt="Back image">
-                <div class="message-area" id="messageArea">
-                  <div class="message-lines" id="messageLines">
-                    {% for line in message_lines %}
-                      <div class="message-line">{{ line }}</div>
-                    {% endfor %}
-                  </div>
-                </div>
-              </article>
+    <section class="scene reveal-item" data-reveal data-reveal-order="1" aria-label="Digital postcard reveal scene">
+      <div class="envelope-stage" aria-hidden="true">
+        <div class="arrival-glow"></div>
+        <div class="envelope-shadow"></div>
+        <div class="envelope">
+          <div class="envelope-art">
+            <img src="./static/bas-envelope.png" alt="Open red envelope">
+          </div>
+          <div class="envelope-liner"></div>
+          <div class="envelope-side-fold left"></div>
+          <div class="envelope-side-fold right"></div>
+          <div class="envelope-center-fold"></div>
+          <div class="envelope-front-cover left">
+            <img src="./static/bas-envelope.png" alt="">
+          </div>
+          <div class="envelope-front-cover right">
+            <img src="./static/bas-envelope.png" alt="">
+          </div>
+          <div class="envelope-front-cover bottom">
+            <img src="./static/bas-envelope.png" alt="">
+          </div>
+          <div class="envelope-letter">
+            <div class="envelope-postcard">
+              <img src="{{ postcard['front_image_url'] }}" alt="">
             </div>
-          </button>
+            <div class="envelope-postcard-shine"></div>
+          </div>
+          <div class="envelope-flap"></div>
+          <div class="envelope-seal"></div>
         </div>
-      </section>
+      </div>
 
-      <aside class="story-stop story-stop-to" aria-label="Postcard recipient">
-        <div>
-          <span class="story-stop-label">To</span>
-          <span class="story-stop-name">{{ recipient_name or 'Someone special' }}</span>
-        </div>
-        <div class="story-stop-meta">A digital postcard keepsake</div>
-      </aside>
-    </div>
+      <div class="emerge-card" aria-hidden="true">
+        <img src="{{ postcard['front_image_url'] }}" alt="">
+      </div>
 
-    <div class="controls">
-      <div class="actions">
-        <button class="button button-secondary" id="replayButton">Replay the moment</button>
+      <div class="postcard-shell" id="postcardShell">
+        <button class="flip-target" id="flipButton" aria-label="Okreni razglednicu">
+          <div class="card-glow"></div>
+
+          <div class="postcard" id="postcard">
+            <article class="face front">
+              <img src="{{ postcard['front_image_url'] }}" alt="Front image">
+            </article>
+
+            <article class="face back">
+              <img src="{{ postcard['back_image_url'] }}" alt="Back image">
+              <div class="message-area" id="messageArea" data-message="{{ postcard['message']|e }}">
+                <canvas class="message-canvas" id="messageCanvas"></canvas>
+                <div class="message-lines" id="messageLines">
+                  {% for line in message_lines %}
+                    <div class="message-line">{{ line }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+            </article>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <div class="controls reveal-item reveal-soft" data-reveal data-reveal-order="2">
+      <button class="hint reveal-item reveal-soft" data-reveal data-reveal-order="3" id="flipHint" type="button">Tap the envelope to open</button>
+      <div class="actions reveal-item reveal-soft" data-reveal data-reveal-order="4">
+        <button class="button button-secondary" id="replayButton">Replay reveal</button>
       </div>
     </div>
   </main>
@@ -1314,8 +1214,12 @@ VIEW_HTML = r"""
     const postcard = document.getElementById('postcard');
     const flipButton = document.getElementById('flipButton');
     const replayButton = document.getElementById('replayButton');
+    const flipHint = document.getElementById('flipHint');
     const messageArea = document.getElementById('messageArea');
+    const messageCanvas = document.getElementById('messageCanvas');
     const messageLines = document.getElementById('messageLines');
+    const scene = document.querySelector('.scene');
+    const revealItems = Array.from(document.querySelectorAll('[data-reveal]'));
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let introTimers = [];
@@ -1323,6 +1227,11 @@ VIEW_HTML = r"""
     let audioContext;
     let noiseBuffer;
     let wavesNodes;
+    let revealObserver;
+    let pointerFrame = 0;
+    let scrollFrame = 0;
+    let revealStarted = false;
+    let revealFinished = false;
 
     function getAudioContext() {
       if (prefersReducedMotion) return null;
@@ -1429,69 +1338,425 @@ VIEW_HTML = r"""
       introTimers = [];
     }
 
+    function setupRevealItems() {
+      revealItems.forEach((item, index) => {
+        if (!item.style.getPropertyValue('--reveal-order')) {
+          item.style.setProperty('--reveal-order', item.dataset.revealOrder || index);
+        }
+      });
+    }
+
+    function revealVisibleItems() {
+      revealItems.forEach((item) => item.classList.add('is-visible'));
+    }
+
+    function setupScrollReveal() {
+      if (prefersReducedMotion || !('IntersectionObserver' in window)) {
+        revealVisibleItems();
+        return;
+      }
+
+      revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-visible');
+          revealObserver.unobserve(entry.target);
+        });
+      }, {
+        threshold: 0.16,
+        rootMargin: '0px 0px -8% 0px'
+      });
+
+      revealItems.forEach((item) => revealObserver.observe(item));
+    }
+
+    function updateScrollDepth() {
+      if (prefersReducedMotion) return;
+      if (scrollFrame) return;
+      scrollFrame = window.requestAnimationFrame(() => {
+        const scrollTop = window.scrollY || window.pageYOffset || 0;
+        document.documentElement.style.setProperty('--scroll-shift', `${Math.min(scrollTop, 220)}px`);
+        scrollFrame = 0;
+      });
+    }
+
+    function updatePointerDepth(event) {
+      if (prefersReducedMotion) return;
+      if (pointerFrame) return;
+      pointerFrame = window.requestAnimationFrame(() => {
+        const x = ((event.clientX / window.innerWidth) - 0.5) * 32;
+        const y = ((event.clientY / window.innerHeight) - 0.5) * 24;
+        document.documentElement.style.setProperty('--pointer-x', `${x.toFixed(2)}px`);
+        document.documentElement.style.setProperty('--pointer-y', `${y.toFixed(2)}px`);
+        pointerFrame = 0;
+      });
+    }
+
+    function updateHintText() {
+      if (!flipHint) return;
+      if (!revealStarted) {
+        flipHint.textContent = 'Tap postcard to flip';
+        return;
+      }
+      flipHint.textContent = flipped ? 'Tap to turn it back' : 'Tap to flip';
+    }
+
     function setFlipState(nextState) {
       flipped = nextState;
       postcard.classList.toggle('flipped', flipped);
+      updateHintText();
     }
 
-    function fitMessageText() {
-      if (!messageArea || !messageLines) return;
+    function wrapCanvasLines(ctx, text, maxWidth) {
+      const words = text.split(/\s+/).filter(Boolean);
+      if (!words.length) return [''];
 
-      let fontSize = parseFloat(window.getComputedStyle(messageLines).fontSize) || 22.4;
-      const minFontSize = window.innerWidth <= 560 ? 16.2 : window.innerWidth <= 900 ? 17.4 : 14;
-      messageLines.style.fontSize = fontSize + 'px';
+      const lines = [];
+      let current = words[0];
 
-      while (fontSize > minFontSize) {
-        const tooTall = messageLines.scrollHeight > messageArea.clientHeight;
-        const tooWide = Array.from(messageLines.children).some(
-          (line) => line.scrollWidth > messageArea.clientWidth
-        );
+      for (let i = 1; i < words.length; i += 1) {
+        const candidate = `${current} ${words[i]}`;
+        if (ctx.measureText(candidate).width <= maxWidth) {
+          current = candidate;
+        } else {
+          lines.push(current);
+          current = words[i];
+        }
+      }
 
-        if (!tooTall && !tooWide) break;
+      lines.push(current);
+      return lines;
+    }
+
+    function renderMessageCanvas() {
+      if (!messageArea || !messageCanvas) return;
+
+      const text = (messageArea.dataset.message || '').replace(/\s+/g, ' ').trim();
+      const width = messageArea.clientWidth;
+      const height = messageArea.clientHeight;
+
+      if (!width || !height) return;
+
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      messageCanvas.width = Math.round(width * dpr);
+      messageCanvas.height = Math.round(height * dpr);
+      messageCanvas.style.width = `${width}px`;
+      messageCanvas.style.height = `${height}px`;
+
+      const ctx = messageCanvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      if (!text) return;
+
+      const horizontalPadding = width * 0.015;
+      const maxWidth = width - (horizontalPadding * 2);
+      const minFont = 8;
+      let fontSize = Math.min(18, height * 0.24);
+      let lineHeight = fontSize * 1.52;
+      let lines = [text];
+
+      while (fontSize >= minFont) {
+        ctx.font = `500 ${fontSize}px Cinzel, Georgia, serif`;
+        lines = wrapCanvasLines(ctx, text, maxWidth);
+        lineHeight = fontSize * 1.52;
+        const totalHeight = lines.length * lineHeight;
+        const widestLine = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
+
+        if (totalHeight <= height && widestLine <= maxWidth) {
+          break;
+        }
 
         fontSize -= 0.5;
-        messageLines.style.fontSize = fontSize + 'px';
       }
+
+      ctx.font = `500 ${Math.max(fontSize, minFont)}px Cinzel, Georgia, serif`;
+      ctx.fillStyle = 'rgba(106, 76, 49, 0.9)';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+
+      const totalHeight = lines.length * lineHeight;
+      let y = Math.max(0, (height - totalHeight) / 2);
+
+      lines.forEach((line) => {
+        ctx.fillText(line, horizontalPadding, y);
+        y += lineHeight;
+      });
     }
 
     function runReveal() {
       clearIntroTimers();
+      revealStarted = true;
+      revealFinished = false;
       setFlipState(false);
-      body.classList.remove('reveal-start', 'reveal-active', 'is-ready');
+      body.classList.remove('awaiting-open', 'reveal-start', 'reveal-active', 'is-ready');
 
       introTimers.push(window.setTimeout(() => {
         body.classList.add('reveal-start');
-      }, 140));
+      }, 40));
 
       introTimers.push(window.setTimeout(() => {
         body.classList.add('reveal-active');
-      }, 860));
+      }, 820));
 
       introTimers.push(window.setTimeout(() => {
         body.classList.remove('reveal-start', 'reveal-active');
         body.classList.add('is-ready');
-      }, 2140));
+        revealFinished = true;
+        updateHintText();
+      }, 1680));
+    }
+
+    function openEnvelope(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (revealStarted) return;
+      runReveal();
     }
 
     function toggleFlip() {
+      if (!revealStarted) {
+        return;
+      }
+      if (!revealFinished) {
+        return;
+      }
       warmAudio();
       setFlipState(!flipped);
     }
 
     flipButton.addEventListener('click', toggleFlip);
     replayButton.addEventListener('click', runReveal);
+    flipHint.addEventListener('click', toggleFlip);
     window.addEventListener('pointerdown', warmAudio, { passive: true });
     window.addEventListener('keydown', warmAudio);
+    window.addEventListener('scroll', updateScrollDepth, { passive: true });
+    window.addEventListener('pointermove', updatePointerDepth, { passive: true });
     window.addEventListener('load', () => {
-      fitMessageText();
+      setupRevealItems();
+      setupScrollReveal();
+      const fontReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+      fontReady.then(() => {
+        renderMessageCanvas();
+      });
       warmAudio();
+      updateScrollDepth();
+      revealVisibleItems();
       runReveal();
+      updateHintText();
     }, { once: true });
-    window.addEventListener('resize', fitMessageText);
+    window.addEventListener('resize', renderMessageCanvas);
   </script>
 </body>
 </html>
+"""
 
+
+PREVIEWS_HTML = r"""
+<!doctype html>
+<html lang="hr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Postcard Previews</title>
+  <style>
+    :root {
+      --bg: #f6efe4;
+      --panel: rgba(255, 252, 247, 0.92);
+      --line: rgba(137, 108, 70, 0.16);
+      --ink: #2d2a26;
+      --muted: #7c6e61;
+      --accent: #b54a3f;
+      --shadow: 0 24px 60px rgba(64, 45, 21, 0.1);
+      --radius: 26px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.9), transparent 34%),
+        linear-gradient(180deg, #fbf7f0 0%, #f3e9da 100%);
+    }
+
+    .wrap {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .hero {
+      margin-bottom: 22px;
+      padding: 26px 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 40px);
+      line-height: 1.05;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .meta {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .thumb {
+      display: block;
+      aspect-ratio: 3 / 2;
+      background: #efe7da;
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .body {
+      padding: 16px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .info {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .slug {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(181, 74, 63, 0.06);
+      color: #7a3f38;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .button-primary {
+      background: linear-gradient(180deg, #c85c50 0%, #a84339 100%);
+      color: white;
+    }
+
+    .button-secondary {
+      border: 1px solid rgba(168, 67, 57, 0.18);
+      color: #7a3f38;
+      background: rgba(255,255,255,0.7);
+    }
+
+    .empty {
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--muted);
+      box-shadow: var(--shadow);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Postcard Previews</h1>
+      <p>Ovdje vidiš sve generirane razglednice i možeš odmah otvoriti svaki link.</p>
+      <div class="meta">Ukupno: {{ postcards|length }}</div>
+    </section>
+
+    {% if postcards %}
+      <section class="grid">
+        {% for postcard in postcards %}
+          <article class="card">
+            <a class="thumb" href="{{ base_url }}/p/{{ postcard['slug'] }}" target="_blank" rel="noopener noreferrer">
+              <img src="{{ postcard['front_image_url'] }}" alt="{{ postcard['product_title'] }}">
+            </a>
+            <div class="body">
+              <h2 class="title">{{ postcard['product_title'] }}</h2>
+              <div class="info">
+                <div>Order: {{ postcard['order_name'] or postcard['order_id'] or '-' }}</div>
+                <div>Recipient: {{ postcard['recipient_name'] or '-' }}</div>
+                <div>Created: {{ postcard['created_at'] }}</div>
+              </div>
+              <div class="slug">{{ base_url }}/p/{{ postcard['slug'] }}</div>
+              <div class="actions">
+                <a class="button button-primary" href="{{ base_url }}/p/{{ postcard['slug'] }}" target="_blank" rel="noopener noreferrer">Open</a>
+                <a class="button button-secondary" href="{{ base_url }}/api/postcard-by-order/{{ postcard['order_id'] }}" target="_blank" rel="noopener noreferrer">Order API</a>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% else %}
+      <section class="empty">Nema generiranih razglednica.</section>
+    {% endif %}
+  </main>
+</body>
+</html>
 """
 
 
@@ -1505,46 +1770,20 @@ def ensure_db():
             order_name TEXT,
             slug TEXT UNIQUE NOT NULL,
             product_title TEXT NOT NULL,
+            recipient_name TEXT DEFAULT '',
             message TEXT NOT NULL,
-            from_name TEXT NOT NULL DEFAULT '',
-            to_name TEXT NOT NULL DEFAULT '',
             front_image_url TEXT NOT NULL,
             back_image_url TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
         """
     )
-    existing_columns = {
+    columns = {
         row[1]
         for row in conn.execute("PRAGMA table_info(postcards)").fetchall()
     }
-    if "from_name" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN from_name TEXT NOT NULL DEFAULT ''")
-    if "to_name" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN to_name TEXT NOT NULL DEFAULT ''")
-
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS webhook_debug_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT NOT NULL,
-            topic TEXT NOT NULL,
-            order_id TEXT,
-            order_name TEXT,
-            order_property_keys TEXT NOT NULL DEFAULT '[]',
-            line_item_property_keys TEXT NOT NULL DEFAULT '[]',
-            extracted_message_length INTEGER NOT NULL DEFAULT 0,
-            extracted_from_length INTEGER NOT NULL DEFAULT 0,
-            extracted_to_length INTEGER NOT NULL DEFAULT 0
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_webhook_debug_events_created_at ON webhook_debug_events(created_at)"
-    )
+    if "recipient_name" not in columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN recipient_name TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -1563,22 +1802,6 @@ def close_db(exception):
         db.close()
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    return response
-
-
-def cors_preflight_response():
-    response = make_response("", 204)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    return response
-
-
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1587,379 +1810,66 @@ def generate_slug() -> str:
     return secrets.token_urlsafe(6)
 
 
-def build_postcard_url(slug: str) -> str:
-    return f"{PUBLIC_POSTCARD_BASE_URL}/p/{slug}"
-
-
-def normalize_shopify_order_id(order_id) -> str:
-    raw_order_id = str(order_id or "").strip()
-    if not raw_order_id:
-        return ""
-
-    gid_match = re.search(r"gid://shopify/[^/]+/(\d+)$", raw_order_id)
-    if gid_match:
-        return gid_match.group(1)
-
-    trailing_digits_match = re.search(r"(\d+)$", raw_order_id)
-    if trailing_digits_match and "/" in raw_order_id:
-        return trailing_digits_match.group(1)
-
-    return raw_order_id
-
-
-def build_order_id_candidates(order_id):
-    raw_order_id = str(order_id or "").strip()
-    normalized_order_id = normalize_shopify_order_id(raw_order_id)
-
-    candidates = []
-    for candidate in (raw_order_id, normalized_order_id):
-        if candidate and candidate not in candidates:
-            candidates.append(candidate)
-
-    return candidates
-
-
-def build_order_name_candidates(order_ref):
-    raw_order_ref = str(order_ref or "").strip()
-    if not raw_order_ref:
-        return []
-
-    normalized_order_ref = normalize_shopify_order_id(raw_order_ref)
-    digit_match = re.search(r"(\d+)$", raw_order_ref)
-
-    candidates = []
-    for candidate in (
-        raw_order_ref,
-        normalized_order_ref,
-        f"#{normalized_order_ref}" if normalized_order_ref.isdigit() else "",
-        digit_match.group(1) if digit_match else "",
-        f"#{digit_match.group(1)}" if digit_match else "",
-    ):
-        if candidate and candidate not in candidates:
-            candidates.append(candidate)
-
-    return candidates
-
-
 def get_template_for_product(product_title: str):
     return TEMPLATES.get(product_title)
 
 
-MESSAGE_PROPERTY_NAMES = {
-    "postcard message",
-    "postcard_message",
-    "postcard-message",
-    "message",
-    "postcard note",
-    "postcard-note",
-}
+def get_logo_src() -> str:
+    logo_path = os.path.join(app.root_path, "static", "send-a-memory-logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as logo_file:
+            encoded = base64.b64encode(logo_file.read()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
 
-FRONT_IMAGE_URL_PROPERTY_NAMES = {
-    "front image url",
-    "uploaded front image",
-    "uploaded front image url",
-    "front image",
-    "front image link",
-}
-
-BACK_IMAGE_URL_PROPERTY_NAMES = {
-    "selected postcard back image",
-    "back image url",
-    "postcard back image",
-    "back image",
-}
-
-FROM_PROPERTY_NAMES = {
-    "from",
-    "from field",
-    "from name",
-    "sender",
-    "sender name",
-}
-
-TO_PROPERTY_NAMES = {
-    "to",
-    "to field",
-    "to name",
-    "recipient",
-    "recipient name",
-}
-
-PROPERTY_CONTAINER_KEYS = (
-    "properties",
-    "line_item_properties",
-    "lineItemProperties",
-    "custom_attributes",
-    "customAttributes",
-    "note_attributes",
-    "noteAttributes",
-    "attributes",
-    "cart_attributes",
-    "cartAttributes",
-)
+    return f"{request.host_url.rstrip('/')}/static/send-a-memory-logo.png"
 
 
-def extract_property_key(raw_value):
-    if not isinstance(raw_value, dict):
-        return ""
-
-    for key_name in ("name", "key", "property", "title", "label"):
-        value = str(raw_value.get(key_name, "") or "").strip()
-        if value:
-            return value
-
-    return ""
-
-
-def extract_property_value(raw_value):
-    if not isinstance(raw_value, dict):
-        return ""
-
-    for value_key in ("value", "text", "content"):
-        value = raw_value.get(value_key, "")
-        if value is not None:
-            normalized = str(value).strip()
-            if normalized:
-                return normalized
-
-    return ""
-
-
-def iter_named_values_deep(raw_value, seen=None):
-    if seen is None:
-        seen = set()
-
-    if isinstance(raw_value, (dict, list)):
-        object_id = id(raw_value)
-        if object_id in seen:
-            return
-        seen.add(object_id)
-
-    if isinstance(raw_value, dict):
-        key_name = extract_property_key(raw_value)
-        prop_value = extract_property_value(raw_value)
-        if key_name and prop_value:
-            yield key_name, prop_value
-
-        for nested_value in raw_value.values():
-            yield from iter_named_values_deep(nested_value, seen)
-        return
-
-    if isinstance(raw_value, list):
-        for nested_value in raw_value:
-            yield from iter_named_values_deep(nested_value, seen)
-
-
-def iter_named_values(raw_values):
-    if isinstance(raw_values, dict):
-        key_name = extract_property_key(raw_values)
-        prop_value = extract_property_value(raw_values)
-        if key_name and prop_value:
-            yield key_name, prop_value
-            return
-
-        for key, value in raw_values.items():
-            yield str(key or "").strip(), str(value or "").strip()
-        return
-
-    for item in raw_values or []:
-        if isinstance(item, dict):
-            key_name = extract_property_key(item)
-            prop_value = extract_property_value(item)
-            if key_name and prop_value:
-                yield key_name, prop_value
-
-
-def extract_named_values(item, container_keys=PROPERTY_CONTAINER_KEYS):
-    for container_key in container_keys:
-        if container_key not in item:
-            continue
-
-        raw_values = item.get(container_key)
-        yield from iter_named_values(raw_values)
-
-
-def extract_line_item_properties(item):
-    yield from extract_named_values(item, ("properties", "custom_attributes", "customAttributes"))
-
-
-def pick_property_values(named_values):
-    message = ""
-    from_name = ""
-    to_name = ""
-    front_image_url = ""
-    back_image_url = ""
-
-    for prop_name, prop_value in named_values:
-        normalized_prop_name = normalize_property_name(prop_name)
-
-        if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
-            message = prop_value
-        elif normalized_prop_name in FRONT_IMAGE_URL_PROPERTY_NAMES and prop_value and not front_image_url:
-            front_image_url = prop_value
-        elif normalized_prop_name in BACK_IMAGE_URL_PROPERTY_NAMES and prop_value and not back_image_url:
-            back_image_url = prop_value
-        elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
-            from_name = prop_value
-        elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
-            to_name = prop_value
-
-    return {
-        "message": message,
-        "from_name": from_name,
-        "to_name": to_name,
-        "front_image_url": front_image_url,
-        "back_image_url": back_image_url,
+def extract_recipient_name(properties):
+    candidate_names = {
+        "Recipient Name",
+        "Recipient",
+        "To",
+        "For",
+        "Name",
+        "Recipient name",
+        "recipient_name",
     }
 
+    for prop in properties or []:
+        prop_name = str(prop.get("name", "")).strip()
+        prop_value = str(prop.get("value", "")).strip()
+        if prop_name in candidate_names and prop_value:
+            return prop_value[:80]
 
-def normalize_property_name(prop_name: str) -> str:
-    normalized = str(prop_name or "").strip()
-
-    bracket_match = re.fullmatch(r"(?:properties|property|attributes|custom_attributes|customAttributes)\[(.+?)\]", normalized)
-    if bracket_match:
-        normalized = bracket_match.group(1)
-
-    return normalized.casefold().replace("_", " ").replace("-", " ").strip()
-
-
-def slugify_name_part(value: str) -> str:
-    raw_value = str(value or "").strip()
-    if not raw_value:
-        return ""
-
-    transliteration_map = str.maketrans({
-        "č": "c",
-        "ć": "c",
-        "š": "s",
-        "ž": "z",
-        "đ": "dj",
-        "Č": "c",
-        "Ć": "c",
-        "Š": "s",
-        "Ž": "z",
-        "Đ": "dj",
-    })
-    normalized = raw_value.translate(transliteration_map)
-    normalized = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
-    normalized = normalized.casefold()
-    normalized = re.sub(r"[^a-z0-9]+", "-", normalized)
-    normalized = re.sub(r"-{2,}", "-", normalized).strip("-")
-    return normalized[:80]
-
-
-def slug_exists(db, slug: str) -> bool:
-    return db.execute(
-        "SELECT 1 FROM postcards WHERE slug = ? LIMIT 1",
-        (slug,),
-    ).fetchone() is not None
-
-
-def generate_unique_slug(db, preferred_slug: str = "") -> str:
-    base_slug = slugify_name_part(preferred_slug)
-
-    if not base_slug:
-        while True:
-            random_slug = generate_slug()
-            if not slug_exists(db, random_slug):
-                return random_slug
-
-    if not slug_exists(db, base_slug):
-        return base_slug
-
-    suffix = 2
-    while True:
-        candidate = f"{base_slug}-{suffix}"
-        if not slug_exists(db, candidate):
-            return candidate
-        suffix += 1
-
-
-def is_probably_generated_slug(slug: str) -> bool:
-    raw_slug = str(slug or "").strip()
-    if not raw_slug:
-        return False
-
-    if "_" in raw_slug or re.search(r"[A-Z]", raw_slug):
-        return True
-
-    return re.fullmatch(r"[A-Za-z0-9_-]{8,}", raw_slug) is not None and "-to-" not in raw_slug
-
-
-def build_preferred_postcard_slug(details) -> str:
-    from_slug = slugify_name_part(details.get("from_name", ""))
-    to_slug = slugify_name_part(details.get("to_name", ""))
-
-    if from_slug and to_slug:
-        return f"{from_slug}-to-{to_slug}"
-    if to_slug:
-        return f"to-{to_slug}"
-    if from_slug:
-        return f"from-{from_slug}"
     return ""
 
 
 def extract_postcard_details(payload):
-    order_id = normalize_shopify_order_id(payload.get("id", ""))
+    order_id = str(payload.get("id", "")).strip()
     order_name = str(payload.get("name", "")).strip()
-    order_level_values = pick_property_values(extract_named_values(payload, ("note_attributes", "noteAttributes", "attributes", "custom_attributes", "customAttributes")))
-    message = order_level_values["message"]
-    from_name = order_level_values["from_name"]
-    to_name = order_level_values["to_name"]
-    front_image_url = order_level_values["front_image_url"]
-    back_image_url = order_level_values["back_image_url"]
-    product_title = ""
 
     for item in payload.get("line_items", []):
-        item_product_title = str(item.get("title", "")).strip()
-        item_values = pick_property_values(extract_line_item_properties(item))
-
-        if item_product_title and (not product_title or (not get_template_for_product(product_title) and get_template_for_product(item_product_title))):
-            product_title = item_product_title
-
-        if item_values["message"] and not message:
-            message = item_values["message"]
-            if item_product_title:
-                product_title = item_product_title
-
-        if item_values["front_image_url"] and not front_image_url:
-            front_image_url = item_values["front_image_url"]
-            if item_product_title:
-                product_title = item_product_title
-
-        if item_values["back_image_url"] and not back_image_url:
-            back_image_url = item_values["back_image_url"]
-            if item_product_title:
-                product_title = item_product_title
-
-        if item_values["from_name"] and not from_name:
-            from_name = item_values["from_name"]
-
-        if item_values["to_name"] and not to_name:
-            to_name = item_values["to_name"]
-
-    if not message or not from_name or not to_name or not front_image_url or not back_image_url:
-        deep_values = pick_property_values(iter_named_values_deep(payload))
-        if deep_values["message"] and not message:
-            message = deep_values["message"]
-        if deep_values["front_image_url"] and not front_image_url:
-            front_image_url = deep_values["front_image_url"]
-        if deep_values["back_image_url"] and not back_image_url:
-            back_image_url = deep_values["back_image_url"]
-        if deep_values["from_name"] and not from_name:
-            from_name = deep_values["from_name"]
-        if deep_values["to_name"] and not to_name:
-            to_name = deep_values["to_name"]
+        product_title = str(item.get("title", "")).strip()
+        properties = item.get("properties", [])
+        recipient_name = extract_recipient_name(properties)
+        for prop in properties:
+            prop_name = str(prop.get("name", "")).strip()
+            prop_value = str(prop.get("value", "")).strip()
+            if prop_name == "Postcard Message" and prop_value:
+                return {
+                    "order_id": order_id,
+                    "order_name": order_name,
+                    "product_title": product_title,
+                    "recipient_name": recipient_name,
+                    "message": prop_value,
+                }
 
     return {
         "order_id": order_id,
         "order_name": order_name,
-        "product_title": product_title,
-        "message": message,
-        "from_name": from_name,
-        "to_name": to_name,
-        "front_image_url": front_image_url,
-        "back_image_url": back_image_url,
+        "product_title": "",
+        "recipient_name": "",
+        "message": "",
     }
 
 
@@ -1985,79 +1895,10 @@ def format_message_lines(message: str, max_lines: int = 3, max_chars_per_line: i
     return wrapped
 
 
-def resolve_postcard_assets(details):
-    template = get_template_for_product(details["product_title"])
-    front_image_url = str(details.get("front_image_url", "") or "").strip()
-    back_image_url = str(details.get("back_image_url", "") or "").strip()
-
-    if front_image_url and back_image_url:
-        return {
-            "front": front_image_url,
-            "back": back_image_url,
-        }
-
-    if template is None:
-        return None
-
-    return {
-        "front": front_image_url or template["front"],
-        "back": back_image_url or template["back"],
-    }
-
-
-def insert_postcard(details, assets):
+def insert_postcard(details, template):
     db = get_db()
-    order_id_candidates = build_order_id_candidates(details["order_id"])
-    preferred_slug = build_preferred_postcard_slug(details)
+    slug = generate_slug()
 
-    if order_id_candidates:
-        placeholders = ", ".join("?" for _ in order_id_candidates)
-        existing = db.execute(
-            f"""
-            SELECT id, slug
-            FROM postcards
-            WHERE order_id IN ({placeholders})
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            order_id_candidates,
-        ).fetchone()
-        if existing:
-            next_slug = existing["slug"]
-            if preferred_slug and is_probably_generated_slug(existing["slug"]):
-                next_slug = generate_unique_slug(db, preferred_slug)
-
-            db.execute(
-                """
-                UPDATE postcards
-                SET order_id = ?,
-                    order_name = ?,
-                    slug = ?,
-                    product_title = ?,
-                    message = ?,
-                    from_name = ?,
-                    to_name = ?,
-                    front_image_url = ?,
-                    back_image_url = ?
-                WHERE id = ?
-                """,
-                (
-                    details["order_id"],
-                    details["order_name"],
-                    next_slug,
-                    details["product_title"],
-                    details["message"],
-                    details["from_name"],
-                    details["to_name"],
-                    assets["front"],
-                    assets["back"],
-                    existing["id"],
-                ),
-            )
-            db.commit()
-            return next_slug
-
-    slug = generate_unique_slug(db, preferred_slug)
     db.execute(
         """
         INSERT INTO postcards (
@@ -2065,25 +1906,23 @@ def insert_postcard(details, assets):
             order_name,
             slug,
             product_title,
+            recipient_name,
             message,
-            from_name,
-            to_name,
             front_image_url,
             back_image_url,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             details["order_id"],
             details["order_name"],
             slug,
             details["product_title"],
+            details.get("recipient_name", ""),
             details["message"],
-            details["from_name"],
-            details["to_name"],
-            assets["front"],
-            assets["back"],
+            template["front"],
+            template["back"],
             utc_now_iso(),
         ),
     )
@@ -2092,60 +1931,6 @@ def insert_postcard(details, assets):
 
 
 ensure_db()
-
-
-def log_webhook_debug_event(topic, payload, details):
-    db = get_db()
-    order_property_keys = []
-    for prop_name, _ in extract_named_values(payload, ("note_attributes", "noteAttributes", "attributes", "custom_attributes", "customAttributes")):
-        if prop_name and prop_name not in order_property_keys:
-            order_property_keys.append(prop_name)
-
-    line_item_property_keys = []
-    for item in payload.get("line_items", []):
-        for prop_name, _ in extract_line_item_properties(item):
-            if prop_name and prop_name not in line_item_property_keys:
-                line_item_property_keys.append(prop_name)
-
-    db.execute(
-        """
-        INSERT INTO webhook_debug_events (
-            created_at,
-            topic,
-            order_id,
-            order_name,
-            order_property_keys,
-            line_item_property_keys,
-            extracted_message_length,
-            extracted_from_length,
-            extracted_to_length
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            utc_now_iso(),
-            str(topic or ""),
-            details.get("order_id", ""),
-            details.get("order_name", ""),
-            json.dumps(order_property_keys, ensure_ascii=True),
-            json.dumps(line_item_property_keys, ensure_ascii=True),
-            len(str(details.get("message", "") or "")),
-            len(str(details.get("from_name", "") or "")),
-            len(str(details.get("to_name", "") or "")),
-        ),
-    )
-    db.execute(
-        """
-        DELETE FROM webhook_debug_events
-        WHERE id NOT IN (
-            SELECT id
-            FROM webhook_debug_events
-            ORDER BY id DESC
-            LIMIT 50
-        )
-        """
-    )
-    db.commit()
 
 
 @app.route("/")
@@ -2158,134 +1943,40 @@ def health():
     return "ok", 200
 
 
-def process_shopify_order_webhook():
+@app.route("/webhooks/orders-paid", methods=["POST"])
+def shopify_orders_paid():
     payload = request.get_json(silent=True) or {}
-    source_topic = str(request.headers.get("X-Shopify-Topic", "")).strip()
     details = extract_postcard_details(payload)
-    property_names = []
-    for item in payload.get("line_items", []):
-        for prop_name, _prop_value in extract_line_item_properties(item):
-            if prop_name and prop_name not in property_names:
-                property_names.append(prop_name)
-    log_webhook_debug_event(source_topic, payload, details)
-    print(json.dumps({
-        "event": "shopify_order_webhook",
-        "topic": source_topic,
-        "order_id_raw": str(payload.get("id", "")).strip(),
-        "order_id_normalized": details["order_id"],
-        "order_name": details["order_name"],
-        "from_name": details["from_name"],
-        "to_name": details["to_name"],
-        "line_item_count": len(payload.get("line_items", [])),
-        "property_names": property_names,
-        "product_titles": [str(item.get("title", "")).strip() for item in payload.get("line_items", [])],
-    }, ensure_ascii=True))
 
-    assets = resolve_postcard_assets(details)
-    if assets is None:
-        return jsonify({
-            "ok": False,
-            "error": "Could not resolve postcard assets",
-            "topic": source_topic,
-            "product_title": details["product_title"],
-            "order_id": details["order_id"],
-        }), 200
+    if not details["message"]:
+        return jsonify({"ok": False, "error": "Postcard Message not found"}), 200
 
-    slug = insert_postcard(details, assets)
-    postcard_url = build_postcard_url(slug)
+    template = get_template_for_product(details["product_title"])
+    if template is None:
+        return jsonify({"ok": False, "error": "Unknown product title"}), 200
+
+    slug = insert_postcard(details, template)
+    postcard_url = f"{request.host_url.rstrip('/')}/p/{slug}"
 
     return jsonify({
         "ok": True,
         "slug": slug,
         "url": postcard_url,
-        "topic": source_topic,
-        "order_id": details["order_id"],
-    }), 200
-
-
-@app.route("/webhooks/orders-paid", methods=["POST", "OPTIONS"])
-@app.route("/webhooks/orders-create", methods=["POST", "OPTIONS"])
-@app.route("/webhooks/orders-updated", methods=["POST", "OPTIONS"])
-def shopify_order_webhook():
-    if request.method == "OPTIONS":
-        return cors_preflight_response()
-
-    return process_shopify_order_webhook()
-
-
-@app.route("/api/download-links", methods=["GET", "OPTIONS"])
-def download_links():
-    if request.method == "OPTIONS":
-        return cors_preflight_response()
-
-    order_id = str(request.args.get("orderId", "")).strip()
-    order_id_candidates = build_order_id_candidates(order_id)
-    order_name_candidates = build_order_name_candidates(order_id)
-    print(json.dumps({
-        "event": "download_links_lookup",
-        "order_id_raw": order_id,
-        "order_id_candidates": order_id_candidates,
-        "order_name_candidates": order_name_candidates,
-    }, ensure_ascii=True))
-
-    if not order_id_candidates:
-        return jsonify({
-            "ready": False,
-            "links": [],
-            "error": "Missing orderId",
-        }), 400
-
-    db = get_db()
-    order_id_placeholders = ", ".join("?" for _ in order_id_candidates)
-    order_name_placeholders = ", ".join("?" for _ in order_name_candidates)
-    postcard = db.execute(
-        f"""
-        SELECT slug, product_title
-        FROM postcards
-        WHERE order_id IN ({order_id_placeholders})
-           OR order_name IN ({order_name_placeholders})
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        [*order_id_candidates, *order_name_candidates],
-    ).fetchone()
-
-    if not postcard:
-        return jsonify({
-            "ready": False,
-            "links": [],
-        }), 200
-
-    postcard_url = build_postcard_url(postcard["slug"])
-
-    return jsonify({
-        "ready": True,
-        "links": [
-            {
-                "title": f"Open {postcard['product_title']}",
-                "url": postcard_url,
-            }
-        ],
     }), 200
 
 
 @app.route("/api/postcard-by-order/<order_id>")
 def postcard_by_order(order_id):
     db = get_db()
-    order_id_candidates = build_order_id_candidates(order_id)
-    order_name_candidates = build_order_name_candidates(order_id)
-    order_id_placeholders = ", ".join("?" for _ in order_id_candidates)
-    order_name_placeholders = ", ".join("?" for _ in order_name_candidates)
     postcard = db.execute(
-        f"""
+        """
         SELECT slug
         FROM postcards
-        WHERE order_id IN ({order_id_placeholders})
-           OR order_name IN ({order_name_placeholders})
+        WHERE order_id = ?
         ORDER BY id DESC
         LIMIT 1
         """,
-        [*order_id_candidates, *order_name_candidates],
+        (str(order_id).strip(),),
     ).fetchone()
 
     if not postcard:
@@ -2293,9 +1984,9 @@ def postcard_by_order(order_id):
 
     return jsonify({
         "ok": True,
-        "order_id": normalize_shopify_order_id(order_id),
+        "order_id": str(order_id).strip(),
         "slug": postcard["slug"],
-        "url": build_postcard_url(postcard["slug"]),
+        "url": f"{request.host_url.rstrip('/')}/p/{postcard['slug']}",
     }), 200
 
 
@@ -2315,76 +2006,25 @@ def view_postcard(slug):
         VIEW_HTML,
         postcard=postcard,
         message_lines=message_lines,
-        message_style=POSTCARD_MESSAGE_STYLE,
+        logo_src=get_logo_src(),
     )
 
 
-@app.route("/api/debug/postcards", methods=["GET"])
-def debug_postcards():
-    limit = max(1, min(int(request.args.get("limit", "10")), 50))
-    order_id = str(request.args.get("orderId", "")).strip()
-
+@app.route("/previews")
+def previews():
     db = get_db()
-    params = []
-    where_sql = ""
-    if order_id:
-        order_id_candidates = build_order_id_candidates(order_id)
-        placeholders = ", ".join("?" for _ in order_id_candidates)
-        where_sql = f"WHERE order_id IN ({placeholders})"
-        params.extend(order_id_candidates)
-
-    rows = db.execute(
-        f"""
-        SELECT id, order_id, order_name, product_title, slug, from_name, to_name, created_at
-        FROM postcards
-        {where_sql}
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        [*params, limit],
-    ).fetchall()
-
-    return jsonify({
-        "count": len(rows),
-        "rows": [dict(row) for row in rows],
-    }), 200
-
-
-@app.route("/api/debug/webhooks", methods=["GET"])
-def debug_webhooks():
-    limit = max(1, min(int(request.args.get("limit", "10")), 50))
-    db = get_db()
-    rows = db.execute(
+    postcards = db.execute(
         """
-        SELECT
-            id,
-            created_at,
-            topic,
-            order_id,
-            order_name,
-            order_property_keys,
-            line_item_property_keys,
-            extracted_message_length,
-            extracted_from_length,
-            extracted_to_length
-        FROM webhook_debug_events
+        SELECT id, order_id, order_name, slug, product_title, recipient_name, front_image_url, created_at
+        FROM postcards
         ORDER BY id DESC
-        LIMIT ?
-        """,
-        (limit,),
+        """
     ).fetchall()
-
-    return jsonify({
-        "count": len(rows),
-        "rows": [
-            {
-                **dict(row),
-                "order_property_keys": json.loads(row["order_property_keys"] or "[]"),
-                "line_item_property_keys": json.loads(row["line_item_property_keys"] or "[]"),
-            }
-            for row in rows
-        ],
-    }), 200
+    return render_template_string(
+        PREVIEWS_HTML,
+        postcards=postcards,
+        base_url=request.host_url.rstrip("/"),
+    )
 
 
 @app.route("/latest")
@@ -2397,7 +2037,7 @@ def latest_postcard():
     if not postcard:
         return "Nema razglednica.", 404
 
-    return build_postcard_url(postcard["slug"]), 200
+    return f"{request.host_url.rstrip('/')}/p/{postcard['slug']}", 200
 
 
 if __name__ == "__main__":
