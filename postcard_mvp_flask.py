@@ -13,18 +13,19 @@ DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
 PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
 
 POSTCARD_MESSAGE_STYLE = {
-    "desktop_font_size": "24px",
-    "mobile_font_size": "16px",
+    "desktop_font_size": "23px",
+    "tablet_font_size": "20px",
+    "mobile_font_size": "18px",
     "font_family": '"Caveat", "Brush Script MT", cursive',
     "font_weight": "600",
     "color": "#6c4a30",
-    "line_height": "1.16",
+    "line_height": "1.24",
     "letter_spacing": "0.015em",
     "rotation": "0deg",
-    "top": "46.8%",
-    "left": "53.2%",
-    "width": "38.9%",
-    "height": "18%",
+    "top": "35.2%",
+    "left": "52.8%",
+    "width": "34.5%",
+    "height": "30.5%",
 }
 
 TEMPLATES = {
@@ -1125,6 +1126,14 @@ VIEW_HTML = r"""
       }
     }
 
+    @media (max-width: 900px) and (min-width: 561px) {
+      .message-lines {
+        font-size: {{ message_style.tablet_font_size }};
+        line-height: 1.18;
+        gap: 0.18em;
+      }
+    }
+
     @media (max-width: 560px) {
       .experience {
         padding: 10px 8px 48px;
@@ -1181,7 +1190,7 @@ VIEW_HTML = r"""
 
       .message-lines {
         font-size: {{ message_style.mobile_font_size }};
-        line-height: 1.08;
+        line-height: 1.16;
         gap: 0.16em;
       }
     }
@@ -1428,10 +1437,11 @@ VIEW_HTML = r"""
     function fitMessageText() {
       if (!messageArea || !messageLines) return;
 
-      let fontSize = 22.4;
+      let fontSize = parseFloat(window.getComputedStyle(messageLines).fontSize) || 22.4;
+      const minFontSize = window.innerWidth <= 560 ? 16.2 : window.innerWidth <= 900 ? 17.4 : 14;
       messageLines.style.fontSize = fontSize + 'px';
 
-      while (fontSize > 13.6) {
+      while (fontSize > minFontSize) {
         const tooTall = messageLines.scrollHeight > messageArea.clientHeight;
         const tooWide = Array.from(messageLines.children).some(
           (line) => line.scrollWidth > messageArea.clientWidth
