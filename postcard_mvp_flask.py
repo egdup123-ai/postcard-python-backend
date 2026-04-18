@@ -1416,7 +1416,6 @@ VIEW_HTML = r"""
           <span class="story-stop-label">From</span>
           <span class="story-stop-name">{{ sender_name or 'A traveler' }}</span>
         </div>
-        <div class="story-stop-meta">Sent from Split, Croatia</div>
       </aside>
 
       <section class="scene" aria-label="Digital postcard reveal scene">
