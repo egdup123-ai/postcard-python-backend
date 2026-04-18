@@ -68,9 +68,20 @@ VIEW_HTML = r"""
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ postcard['product_title'] }}</title>
+  <title>{{ postcard['product_title'] }} | Send a Memory</title>
+  <meta name="description" content="A digital postcard from {{ postcard['from_name'] or 'someone special' }} to {{ postcard['to_name'] or 'someone special' }}.">
+  <meta name="theme-color" content="#f4e7d3">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ postcard['product_title'] }} | Send a Memory">
+  <meta property="og:description" content="A digital postcard from {{ postcard['from_name'] or 'someone special' }} to {{ postcard['to_name'] or 'someone special' }}.">
+  <meta property="og:image" content="{{ postcard['front_image_url'] }}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ postcard['product_title'] }} | Send a Memory">
+  <meta name="twitter:description" content="A digital postcard from {{ postcard['from_name'] or 'someone special' }} to {{ postcard['to_name'] or 'someone special' }}.">
+  <meta name="twitter:image" content="{{ postcard['front_image_url'] }}">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cormorant+Garamond:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
     :root {
       --bg-top: #fbf7f2;
       --bg-mid: #efe6de;
@@ -867,35 +878,17 @@ VIEW_HTML = r"""
       width: {{ message_style.width }};
       height: {{ message_style.height }};
       overflow: hidden;
-      display: flex;
-      align-items: flex-start;
-      justify-content: flex-start;
-      padding-right: 2%;
+      display: block;
     }
 
     .message-lines {
-      width: 100%;
-      display: grid;
-      gap: 0.2em;
-      text-align: left;
-      align-content: start;
-      font-family: {{ message_style.font_family|safe }};
-      font-size: var(--message-font-size);
-      line-height: {{ message_style.line_height }};
-      letter-spacing: {{ message_style.letter_spacing }};
-      font-weight: {{ message_style.font_weight }};
-      color: {{ message_style.color }};
-      text-shadow: 0 1px 0 rgba(255,255,255,0.12);
-      transform-origin: top left;
-      transform: rotate(var(--message-rotation));
-      filter: saturate(0.92);
+      display: none;
     }
 
-    .message-line {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: clip;
-      padding-left: 0.08em;
+    .message-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     .message-line:nth-child(2) {
@@ -1280,7 +1273,8 @@ VIEW_HTML = r"""
 
               <article class="face back">
                 <img src="{{ postcard['back_image_url'] }}" alt="Back image">
-                <div class="message-area" id="messageArea">
+                <div class="message-area" id="messageArea" data-message="{{ postcard['message']|e }}">
+                  <canvas class="message-canvas" id="messageCanvas"></canvas>
                   <div class="message-lines" id="messageLines">
                     {% for line in message_lines %}
                       <div class="message-line">{{ line }}</div>
@@ -1304,6 +1298,7 @@ VIEW_HTML = r"""
 
     <div class="controls">
       <div class="actions">
+        <button class="button button-secondary" id="shareButton">Share postcard</button>
         <button class="button button-secondary" id="replayButton">Replay the moment</button>
       </div>
     </div>
@@ -1314,7 +1309,9 @@ VIEW_HTML = r"""
     const postcard = document.getElementById('postcard');
     const flipButton = document.getElementById('flipButton');
     const replayButton = document.getElementById('replayButton');
+    const shareButton = document.getElementById('shareButton');
     const messageArea = document.getElementById('messageArea');
+    const messageCanvas = document.getElementById('messageCanvas');
     const messageLines = document.getElementById('messageLines');
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1434,24 +1431,129 @@ VIEW_HTML = r"""
       postcard.classList.toggle('flipped', flipped);
     }
 
-    function fitMessageText() {
-      if (!messageArea || !messageLines) return;
+    function wrapCanvasLines(ctx, text, maxWidth) {
+      const words = text.split(/\s+/).filter(Boolean);
+      if (!words.length) return [''];
 
-      let fontSize = parseFloat(window.getComputedStyle(messageLines).fontSize) || 22.4;
-      const minFontSize = window.innerWidth <= 560 ? 16.2 : window.innerWidth <= 900 ? 17.4 : 14;
-      messageLines.style.fontSize = fontSize + 'px';
+      const lines = [];
+      let current = words[0];
 
-      while (fontSize > minFontSize) {
-        const tooTall = messageLines.scrollHeight > messageArea.clientHeight;
-        const tooWide = Array.from(messageLines.children).some(
-          (line) => line.scrollWidth > messageArea.clientWidth
-        );
+      for (let i = 1; i < words.length; i += 1) {
+        const candidate = `${current} ${words[i]}`;
+        if (ctx.measureText(candidate).width <= maxWidth) {
+          current = candidate;
+        } else {
+          lines.push(current);
+          current = words[i];
+        }
+      }
 
-        if (!tooTall && !tooWide) break;
+      lines.push(current);
+      return lines;
+    }
+
+    function renderMessageCanvas() {
+      if (!messageArea || !messageCanvas) return;
+
+      const text = (messageArea.dataset.message || '').replace(/\s+/g, ' ').trim();
+      const width = messageArea.clientWidth;
+      const height = messageArea.clientHeight;
+
+      if (!width || !height) return;
+
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      messageCanvas.width = Math.round(width * dpr);
+      messageCanvas.height = Math.round(height * dpr);
+      messageCanvas.style.width = `${width}px`;
+      messageCanvas.style.height = `${height}px`;
+
+      const ctx = messageCanvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      if (!text) return;
+
+      const horizontalPadding = Math.max(3, width * 0.02);
+      const verticalPadding = Math.max(4, height * 0.08);
+      const maxWidth = width - (horizontalPadding * 2);
+      const availableHeight = Math.max(0, height - (verticalPadding * 2));
+      const minFont = 7.5;
+      let fontSize = Math.min(18, height * 0.27);
+      let lines = [text];
+      let ascent = fontSize * 0.76;
+      let descent = fontSize * 0.28;
+      let lineGap = fontSize * 0.3;
+
+      while (fontSize >= minFont) {
+        ctx.font = `500 ${fontSize}px Cinzel, Georgia, serif`;
+        lines = wrapCanvasLines(ctx, text, maxWidth);
+        const metrics = ctx.measureText('Agjpqy');
+        ascent = metrics.actualBoundingBoxAscent || fontSize * 0.76;
+        descent = metrics.actualBoundingBoxDescent || fontSize * 0.28;
+        lineGap = fontSize * 0.3;
+        const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
+        const widestLine = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
+
+        if (totalHeight <= availableHeight && widestLine <= maxWidth) {
+          break;
+        }
 
         fontSize -= 0.5;
-        messageLines.style.fontSize = fontSize + 'px';
       }
+
+      ctx.font = `500 ${Math.max(fontSize, minFont)}px Cinzel, Georgia, serif`;
+      ctx.fillStyle = 'rgba(106, 76, 49, 0.9)';
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+
+      const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
+      let y = verticalPadding + Math.max(0, (availableHeight - totalHeight) / 2) + ascent;
+
+      lines.forEach((line) => {
+        ctx.fillText(line, horizontalPadding, y);
+        y += ascent + descent + lineGap;
+      });
+    }
+
+    async function sharePostcard() {
+      const shareUrl = window.location.href;
+      const shareTitle = document.title;
+      const shareText = 'Take a look at this postcard.';
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: shareTitle,
+            text: shareText,
+            url: shareUrl
+          });
+          return;
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            return;
+          }
+        }
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          if (shareButton) {
+            const originalText = shareButton.textContent;
+            shareButton.textContent = 'Link copied';
+            window.setTimeout(() => {
+              shareButton.textContent = originalText;
+            }, 1600);
+          }
+          return;
+        } catch (error) {
+        }
+      }
+
+      window.prompt('Copy this postcard link', shareUrl);
     }
 
     function runReveal() {
@@ -1480,14 +1582,17 @@ VIEW_HTML = r"""
 
     flipButton.addEventListener('click', toggleFlip);
     replayButton.addEventListener('click', runReveal);
+    if (shareButton) {
+      shareButton.addEventListener('click', sharePostcard);
+    }
     window.addEventListener('pointerdown', warmAudio, { passive: true });
     window.addEventListener('keydown', warmAudio);
     window.addEventListener('load', () => {
-      fitMessageText();
+      renderMessageCanvas();
       warmAudio();
       runReveal();
     }, { once: true });
-    window.addEventListener('resize', fitMessageText);
+    window.addEventListener('resize', renderMessageCanvas);
   </script>
 </body>
 </html>
@@ -1661,8 +1766,8 @@ PREVIEWS_HTML = r"""
           <div class="body">
             <h2 class="title">{{ postcard['product_title'] }}</h2>
             <p class="info">
-              Order: {{ postcard['order_name'] or postcard['order_id'] or '—' }}<br>
-              To: {{ postcard['to_name'] or '—' }}<br>
+              Order: {{ postcard['order_name'] or postcard['order_id'] or 'â€”' }}<br>
+              To: {{ postcard['to_name'] or 'â€”' }}<br>
               Created: {{ postcard['created_at'] }}
             </p>
             <div class="slug">{{ postcard['slug'] }}</div>
@@ -2014,16 +2119,16 @@ def slugify_name_part(value: str) -> str:
         return ""
 
     transliteration_map = str.maketrans({
-        "č": "c",
-        "ć": "c",
-        "š": "s",
-        "ž": "z",
-        "đ": "dj",
-        "Č": "c",
-        "Ć": "c",
-        "Š": "s",
-        "Ž": "z",
-        "Đ": "dj",
+        "Ä": "c",
+        "Ä‡": "c",
+        "Å¡": "s",
+        "Å¾": "z",
+        "Ä‘": "dj",
+        "ÄŒ": "c",
+        "Ä†": "c",
+        "Å ": "s",
+        "Å½": "z",
+        "Ä": "dj",
     })
     normalized = raw_value.translate(transliteration_map)
     normalized = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
@@ -2605,3 +2710,4 @@ def previews():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)
+
