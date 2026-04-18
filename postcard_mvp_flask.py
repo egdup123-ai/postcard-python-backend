@@ -2286,16 +2286,16 @@ def slugify_name_part(value: str) -> str:
         return ""
 
     transliteration_map = str.maketrans({
-        "Ä": "c",
-        "Ä‡": "c",
-        "Å¡": "s",
-        "Å¾": "z",
-        "Ä‘": "dj",
-        "ÄŒ": "c",
-        "Ä†": "c",
-        "Å ": "s",
-        "Å½": "z",
-        "Ä": "dj",
+        "\u010d": "c",
+        "\u0107": "c",
+        "\u0161": "s",
+        "\u017e": "z",
+        "\u0111": "dj",
+        "\u010c": "c",
+        "\u0106": "c",
+        "\u0160": "s",
+        "\u017d": "z",
+        "\u0110": "dj",
     })
     normalized = raw_value.translate(transliteration_map)
     normalized = unicodedata.normalize("NFKD", normalized).encode("ascii", "ignore").decode("ascii")
