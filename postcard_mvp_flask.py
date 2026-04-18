@@ -81,7 +81,7 @@ VIEW_HTML = r"""
   <meta name="twitter:description" content="A digital postcard from {{ postcard['from_name'] or 'someone special' }} to {{ postcard['to_name'] or 'someone special' }}.">
   <meta name="twitter:image" content="{{ postcard['front_image_url'] }}">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cinzel:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
     :root {
       --bg-top: #fbf7f2;
       --bg-mid: #efe6de;
@@ -1647,20 +1647,20 @@ VIEW_HTML = r"""
       const verticalPadding = Math.max(4, height * 0.08);
       const maxWidth = width - (horizontalPadding * 2);
       const availableHeight = Math.max(0, height - (verticalPadding * 2));
-      const minFont = 7.5;
-      let fontSize = Math.min(18, height * 0.27);
+      const minFont = 8;
+      let fontSize = Math.min(21, height * 0.3);
       let lines = [text];
       let ascent = fontSize * 0.76;
       let descent = fontSize * 0.28;
       let lineGap = fontSize * 0.3;
 
       while (fontSize >= minFont) {
-        ctx.font = `500 ${fontSize}px Cinzel, Georgia, serif`;
+        ctx.font = `600 ${fontSize}px "Caveat", "Brush Script MT", cursive`;
         lines = wrapCanvasLines(ctx, text, maxWidth);
-        const metrics = ctx.measureText('Agjpqy');
-        ascent = metrics.actualBoundingBoxAscent || fontSize * 0.76;
-        descent = metrics.actualBoundingBoxDescent || fontSize * 0.28;
-        lineGap = fontSize * 0.3;
+        const metrics = ctx.measureText('AgjpqyQ');
+        ascent = metrics.actualBoundingBoxAscent || fontSize * 0.78;
+        descent = metrics.actualBoundingBoxDescent || fontSize * 0.32;
+        lineGap = fontSize * 0.22;
         const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
         const widestLine = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
 
@@ -1671,10 +1671,14 @@ VIEW_HTML = r"""
         fontSize -= 0.5;
       }
 
-      ctx.font = `500 ${Math.max(fontSize, minFont)}px Cinzel, Georgia, serif`;
-      ctx.fillStyle = 'rgba(106, 76, 49, 0.9)';
+      ctx.font = `600 ${Math.max(fontSize, minFont)}px "Caveat", "Brush Script MT", cursive`;
+      ctx.fillStyle = '#a86f7d';
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.16)';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 1;
 
       const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
       let y = verticalPadding + Math.max(0, (availableHeight - totalHeight) / 2) + ascent;
