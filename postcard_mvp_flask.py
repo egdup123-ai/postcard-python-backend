@@ -964,6 +964,134 @@ VIEW_HTML = r"""
       }
     }
 
+    @keyframes keepsakeSpin {
+      0%, 20% {
+        transform: rotateY(0deg);
+      }
+      28%, 56% {
+        transform: rotateY(180deg);
+      }
+      64%, 100% {
+        transform: rotateY(360deg);
+      }
+    }
+
+    @keyframes keepsakeFloat {
+      0%, 100% {
+        transform: translateY(0) scale(1);
+      }
+      50% {
+        transform: translateY(-5px) scale(1.018);
+      }
+    }
+
+    .keepsake-preview {
+      position: fixed;
+      top: 22px;
+      right: 22px;
+      z-index: 3;
+      width: min(22vw, 170px);
+      aspect-ratio: 3 / 2;
+      border-radius: 18px;
+      padding: 10px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.94), rgba(244,236,225,0.82));
+      border: 1px solid rgba(255,255,255,0.9);
+      box-shadow:
+        0 24px 48px rgba(78, 76, 67, 0.18),
+        inset 0 1px 0 rgba(255,255,255,0.88);
+      backdrop-filter: blur(14px);
+      opacity: 0;
+      transform: translateY(-8px);
+      transition: opacity 0.85s ease, transform 1s var(--ease-soft);
+      overflow: hidden;
+    }
+
+    .keepsake-preview::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.34), transparent 34%),
+        linear-gradient(180deg, transparent 58%, rgba(127, 101, 65, 0.05));
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    body.is-ready .keepsake-preview {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .keepsake-preview::before {
+      content: "Front & back";
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      z-index: 2;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(92, 77, 57, 0.72);
+    }
+
+    .keepsake-preview-stage {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 30px;
+      bottom: 12px;
+      perspective: 900px;
+      z-index: 2;
+    }
+
+    .keepsake-preview-card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      animation: keepsakeSpin 8.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+    }
+
+    .keepsake-preview-inner {
+      position: absolute;
+      inset: 0;
+      animation: keepsakeFloat 3.2s ease-in-out infinite;
+      transform-style: preserve-3d;
+    }
+
+    .keepsake-preview-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      box-shadow: 0 14px 24px rgba(49, 40, 26, 0.14);
+      background: #fff;
+    }
+
+    .keepsake-preview-face::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.2), transparent 24%),
+        linear-gradient(180deg, transparent 64%, rgba(31, 23, 12, 0.08));
+      pointer-events: none;
+    }
+
+    .keepsake-preview-face img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .keepsake-preview-back {
+      transform: rotateY(180deg);
+    }
+
     .controls {
       position: fixed;
       left: 50%;
@@ -1031,6 +1159,27 @@ VIEW_HTML = r"""
     }
 
     @media (max-width: 760px) {
+      .keepsake-preview {
+        top: 14px;
+        right: 14px;
+        width: min(31vw, 128px);
+        border-radius: 16px;
+        padding: 8px;
+      }
+
+      .keepsake-preview::before {
+        top: 8px;
+        left: 10px;
+        font-size: 8px;
+      }
+
+      .keepsake-preview-stage {
+        left: 10px;
+        right: 10px;
+        top: 24px;
+        bottom: 10px;
+      }
+
       .experience {
         min-height: 100svh;
         padding: 12px 10px 56px;
@@ -1189,6 +1338,10 @@ VIEW_HTML = r"""
     }
 
     @media (max-height: 760px) and (max-width: 760px) {
+      .keepsake-preview {
+        width: min(27vw, 112px);
+      }
+
       .brand-mark {
         top: 8px;
         min-width: min(62vw, 210px);
@@ -1237,6 +1390,20 @@ VIEW_HTML = r"""
   <div class="coastline"></div>
   <div class="coast-waves"></div>
   <div class="stage-shadow"></div>
+  <div class="keepsake-preview" aria-hidden="true">
+    <div class="keepsake-preview-stage">
+      <div class="keepsake-preview-card">
+        <div class="keepsake-preview-inner">
+          <div class="keepsake-preview-face keepsake-preview-front">
+            <img src="{{ postcard['front_image_url'] }}" alt="">
+          </div>
+          <div class="keepsake-preview-face keepsake-preview-back">
+            <img src="{{ postcard['back_image_url'] }}" alt="">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <main class="experience">
     <div class="brand-mark" id="brandMark" aria-hidden="true">
