@@ -1435,11 +1435,11 @@ VIEW_HTML = r"""
 
             <div class="postcard" id="postcard">
               <article class="face front">
-                <img src="{{ postcard['front_image_url'] }}" alt="Front image">
+                <img src="{{ postcard['front_image_url'] }}" alt="Front image" crossorigin="anonymous" referrerpolicy="no-referrer">
               </article>
 
               <article class="face back">
-                <img src="{{ postcard['back_image_url'] }}" alt="Back image">
+                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
                 <div class="message-area" id="messageArea" data-message="{{ postcard['message']|e }}">
                   <canvas class="message-canvas" id="messageCanvas"></canvas>
                   <div class="message-lines" id="messageLines">
@@ -1480,6 +1480,7 @@ VIEW_HTML = r"""
     const messageArea = document.getElementById('messageArea');
     const messageCanvas = document.getElementById('messageCanvas');
     const messageLines = document.getElementById('messageLines');
+    const backImage = document.getElementById('backImage');
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let introTimers = [];
@@ -1619,6 +1620,149 @@ VIEW_HTML = r"""
       return lines;
     }
 
+    function rgbToHsl(r, g, b) {
+      const rn = r / 255;
+      const gn = g / 255;
+      const bn = b / 255;
+      const max = Math.max(rn, gn, bn);
+      const min = Math.min(rn, gn, bn);
+      let h = 0;
+      let s = 0;
+      const l = (max + min) / 2;
+
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+        switch (max) {
+          case rn:
+            h = (gn - bn) / d + (gn < bn ? 6 : 0);
+            break;
+          case gn:
+            h = (bn - rn) / d + 2;
+            break;
+          default:
+            h = (rn - gn) / d + 4;
+            break;
+        }
+
+        h /= 6;
+      }
+
+      return { h, s, l };
+    }
+
+    function hueToRgb(p, q, t) {
+      let tn = t;
+      if (tn < 0) tn += 1;
+      if (tn > 1) tn -= 1;
+      if (tn < 1 / 6) return p + (q - p) * 6 * tn;
+      if (tn < 1 / 2) return q;
+      if (tn < 2 / 3) return p + (q - p) * (2 / 3 - tn) * 6;
+      return p;
+    }
+
+    function hslToRgb(h, s, l) {
+      if (s === 0) {
+        const value = Math.round(l * 255);
+        return { r: value, g: value, b: value };
+      }
+
+      const q = l < 0.5 ? l * (1 + s) : l + s - (l * s);
+      const p = 2 * l - q;
+
+      return {
+        r: Math.round(hueToRgb(p, q, h + 1 / 3) * 255),
+        g: Math.round(hueToRgb(p, q, h) * 255),
+        b: Math.round(hueToRgb(p, q, h - 1 / 3) * 255)
+      };
+    }
+
+    function relativeLuminance(r, g, b) {
+      const normalize = (value) => {
+        const channel = value / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      };
+
+      const rr = normalize(r);
+      const gg = normalize(g);
+      const bb = normalize(b);
+      return (0.2126 * rr) + (0.7152 * gg) + (0.0722 * bb);
+    }
+
+    function contrastRatio(foreground, background) {
+      const fg = relativeLuminance(foreground.r, foreground.g, foreground.b);
+      const bg = relativeLuminance(background.r, background.g, background.b);
+      const lighter = Math.max(fg, bg);
+      const darker = Math.min(fg, bg);
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    function deriveInkColorFromBackground(background) {
+      const { h, s, l } = rgbToHsl(background.r, background.g, background.b);
+      const hueShift = s < 0.08 ? 0.94 : 0.965;
+      const targetHue = (h * hueShift + 0.01) % 1;
+      const targetSaturation = Math.min(0.42, Math.max(0.18, s * 0.82 + 0.08));
+      let targetLightness = l > 0.72 ? Math.max(0.24, l - 0.48) : Math.max(0.18, l - 0.3);
+      let ink = hslToRgb(targetHue, targetSaturation, targetLightness);
+
+      while (contrastRatio(ink, background) < 4.6 && targetLightness > 0.12) {
+        targetLightness -= 0.04;
+        ink = hslToRgb(targetHue, targetSaturation, targetLightness);
+      }
+
+      return `rgb(${ink.r}, ${ink.g}, ${ink.b})`;
+    }
+
+    function sampleMessageBackgroundColor() {
+      if (!backImage || !messageArea) return null;
+      if (!backImage.complete || !backImage.naturalWidth || !backImage.naturalHeight) return null;
+
+      const postcardBack = backImage.closest('.face.back');
+      if (!postcardBack) return null;
+
+      const backRect = postcardBack.getBoundingClientRect();
+      const areaRect = messageArea.getBoundingClientRect();
+      if (!backRect.width || !backRect.height || !areaRect.width || !areaRect.height) return null;
+
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = Math.max(32, Math.round(backRect.width));
+      sampleCanvas.height = Math.max(32, Math.round(backRect.height));
+      const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+      if (!sampleCtx) return null;
+
+      try {
+        sampleCtx.drawImage(backImage, 0, 0, sampleCanvas.width, sampleCanvas.height);
+        const sampleX = Math.max(0, Math.floor(((areaRect.left - backRect.left) / backRect.width) * sampleCanvas.width));
+        const sampleY = Math.max(0, Math.floor(((areaRect.top - backRect.top) / backRect.height) * sampleCanvas.height));
+        const sampleWidth = Math.max(8, Math.min(sampleCanvas.width - sampleX, Math.ceil((areaRect.width / backRect.width) * sampleCanvas.width)));
+        const sampleHeight = Math.max(8, Math.min(sampleCanvas.height - sampleY, Math.ceil((areaRect.height / backRect.height) * sampleCanvas.height)));
+        const imageData = sampleCtx.getImageData(sampleX, sampleY, sampleWidth, sampleHeight).data;
+
+        let totalR = 0;
+        let totalG = 0;
+        let totalB = 0;
+        let count = 0;
+
+        for (let i = 0; i < imageData.length; i += 16) {
+          totalR += imageData[i];
+          totalG += imageData[i + 1];
+          totalB += imageData[i + 2];
+          count += 1;
+        }
+
+        if (!count) return null;
+
+        return {
+          r: Math.round(totalR / count),
+          g: Math.round(totalG / count),
+          b: Math.round(totalB / count)
+        };
+      } catch (error) {
+        return null;
+      }
+    }
+
     function renderMessageCanvas() {
       if (!messageArea || !messageCanvas) return;
 
@@ -1672,7 +1816,8 @@ VIEW_HTML = r"""
       }
 
       ctx.font = `600 ${Math.max(fontSize, minFont)}px "Caveat", "Brush Script MT", cursive`;
-      ctx.fillStyle = '#a86f7d';
+      const sampledBackground = sampleMessageBackgroundColor();
+      ctx.fillStyle = sampledBackground ? deriveInkColorFromBackground(sampledBackground) : '#a86f7d';
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
       ctx.shadowColor = 'rgba(255, 255, 255, 0.16)';
