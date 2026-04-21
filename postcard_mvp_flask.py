@@ -28,6 +28,116 @@ POSTCARD_MESSAGE_STYLE = {
     "height": "30.5%",
 }
 
+POSTCARD_LAYOUT_PRESETS = {
+    "single": {
+        "label": "Single Photo",
+        "slot_classes": ["slot-a"],
+    },
+    "split": {
+        "label": "Split Duo",
+        "slot_classes": ["slot-a", "slot-b"],
+    },
+    "trio": {
+        "label": "Memory Trio",
+        "slot_classes": ["slot-a", "slot-b", "slot-c"],
+    },
+    "grid": {
+        "label": "Four Grid",
+        "slot_classes": ["slot-a", "slot-b", "slot-c", "slot-d"],
+    },
+    "story": {
+        "label": "Story Strip",
+        "slot_classes": ["slot-a", "slot-b", "slot-c", "slot-d", "slot-e"],
+    },
+}
+
+POSTCARD_LAYOUT_ALIASES = {
+    "single photo": "single",
+    "single": "single",
+    "split duo": "split",
+    "split": "split",
+    "memory trio": "trio",
+    "trio": "trio",
+    "four grid": "grid",
+    "grid": "grid",
+    "story strip": "story",
+    "story": "story",
+    "strip": "story",
+}
+
+POSTCARD_FRAME_PRESETS = {
+    "classic-ivory": {"label": "Classic Ivory"},
+    "sunlit-paper": {"label": "Sunlit Paper"},
+    "rose-keepsake": {"label": "Rose Keepsake"},
+    "atlas-stamp": {"label": "Atlas Stamp"},
+    "sea-voyage": {"label": "Sea Voyage"},
+}
+
+POSTCARD_FRAME_ALIASES = {
+    "classic ivory": "classic-ivory",
+    "classic-ivory": "classic-ivory",
+    "sunlit paper": "sunlit-paper",
+    "sunlit-paper": "sunlit-paper",
+    "rose keepsake": "rose-keepsake",
+    "rose-keepsake": "rose-keepsake",
+    "atlas stamp": "atlas-stamp",
+    "atlas-stamp": "atlas-stamp",
+    "sea voyage": "sea-voyage",
+    "sea-voyage": "sea-voyage",
+}
+
+POSTCARD_FONT_PRESETS = {
+    "caveat": {
+        "label": "Caveat",
+        "font_family": '"Caveat", "Brush Script MT", cursive',
+        "font_weight": "600",
+        "color": "#6c4a30",
+        "letter_spacing": "0.015em",
+    },
+    "dancing-script": {
+        "label": "Dancing Script",
+        "font_family": '"Dancing Script", "Brush Script MT", cursive',
+        "font_weight": "600",
+        "color": "#7b5641",
+        "letter_spacing": "0.01em",
+    },
+    "allura": {
+        "label": "Allura",
+        "font_family": '"Allura", "Brush Script MT", cursive',
+        "font_weight": "400",
+        "color": "#8b6170",
+        "letter_spacing": "0.01em",
+    },
+    "cormorant": {
+        "label": "Cormorant Garamond",
+        "font_family": '"Cormorant Garamond", Georgia, serif',
+        "font_weight": "600",
+        "color": "#775540",
+        "letter_spacing": "0.008em",
+    },
+    "cinzel": {
+        "label": "Cinzel",
+        "font_family": '"Cinzel", Georgia, serif',
+        "font_weight": "500",
+        "color": "#70523d",
+        "letter_spacing": "0.02em",
+    },
+}
+
+POSTCARD_FONT_ALIASES = {
+    "caveat": "caveat",
+    "handwriting": "caveat",
+    "dancing script": "dancing-script",
+    "dancing-script": "dancing-script",
+    "allura": "allura",
+    "romantic script": "allura",
+    "cormorant": "cormorant",
+    "cormorant garamond": "cormorant",
+    "editorial serif": "cormorant",
+    "cinzel": "cinzel",
+    "classic serif": "cinzel",
+}
+
 TEMPLATES = {
     "Riva": {
         "front": "https://sendamemory.store/cdn/shop/files/Panorama_Splita.jpg?v=1775754558&width=1200",
@@ -81,7 +191,7 @@ VIEW_HTML = r"""
   <meta name="twitter:description" content="A digital postcard from {{ postcard['from_name'] or 'someone special' }} to {{ postcard['to_name'] or 'someone special' }}.">
   <meta name="twitter:image" content="{{ postcard['front_image_url'] }}">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Cinzel:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Allura&family=Caveat:wght@500;600;700&family=Cinzel:wght@500;600&family=Cormorant+Garamond:wght@500;600;700&family=Dancing+Script:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap');
     :root {
       --bg-top: #fbf7f2;
       --bg-mid: #efe6de;
@@ -841,6 +951,154 @@ VIEW_HTML = r"""
       display: block;
     }
 
+    .postcard-front-art {
+      --front-gap: 2px;
+      --front-pad: 2px;
+      --front-slot-pad: 0px;
+      --front-frame-gap: linear-gradient(180deg, #ece2d3 0%, #e2d4c0 100%);
+      --front-frame-surface: linear-gradient(180deg, #fbf6ee 0%, #efe5d8 100%);
+      --front-frame-border: rgba(150, 126, 92, 0.2);
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      gap: var(--front-gap);
+      padding: var(--front-pad);
+      background: var(--front-frame-gap);
+      isolation: isolate;
+    }
+
+    .postcard-front-art::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.2), transparent 44%),
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .postcard-front-art.is-single {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+    }
+
+    .postcard-front-art.is-split {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr;
+    }
+
+    .postcard-front-art.is-trio {
+      grid-template-columns: 1.16fr 0.84fr;
+      grid-template-rows: 1fr 1fr;
+    }
+
+    .postcard-front-art.is-grid {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+
+    .postcard-front-art.is-story {
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: 1fr 1fr;
+    }
+
+    .postcard-front-slot {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      padding: var(--front-slot-pad);
+      background: var(--front-frame-surface);
+      border: 1px solid var(--front-frame-border);
+    }
+
+    .postcard-front-slot-media {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .postcard-front-slot-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .postcard-front-art.is-trio .slot-a {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+    }
+
+    .postcard-front-art.is-trio .slot-b {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .postcard-front-art.is-trio .slot-c {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .postcard-front-art.is-story .slot-a {
+      grid-column: 1 / span 2;
+      grid-row: 1;
+    }
+
+    .postcard-front-art.is-story .slot-b {
+      grid-column: 3 / span 2;
+      grid-row: 1;
+    }
+
+    .postcard-front-art.is-story .slot-c {
+      grid-column: 5 / span 2;
+      grid-row: 1;
+    }
+
+    .postcard-front-art.is-story .slot-d {
+      grid-column: 1 / span 3;
+      grid-row: 2;
+    }
+
+    .postcard-front-art.is-story .slot-e {
+      grid-column: 4 / span 3;
+      grid-row: 2;
+    }
+
+    .postcard-front-art.frame-classic-ivory {
+      --front-frame-gap: linear-gradient(180deg, #ece2d3 0%, #e2d4c0 100%);
+      --front-frame-surface: linear-gradient(180deg, #fbf6ee 0%, #efe5d8 100%);
+      --front-frame-border: rgba(150, 126, 92, 0.2);
+    }
+
+    .postcard-front-art.frame-sunlit-paper {
+      --front-frame-gap: linear-gradient(180deg, #f1e1c1 0%, #e8d5b1 100%);
+      --front-frame-surface: linear-gradient(180deg, #fff4dc 0%, #f6e5c4 100%);
+      --front-frame-border: rgba(177, 137, 73, 0.24);
+    }
+
+    .postcard-front-art.frame-rose-keepsake {
+      --front-frame-gap: linear-gradient(180deg, #efd8d0 0%, #e5c5bc 100%);
+      --front-frame-surface: linear-gradient(180deg, #fff0ec 0%, #f2d7ce 100%);
+      --front-frame-border: rgba(171, 111, 96, 0.22);
+    }
+
+    .postcard-front-art.frame-atlas-stamp {
+      --front-frame-gap: linear-gradient(180deg, #d7d4c8 0%, #c7bfad 100%);
+      --front-frame-surface: linear-gradient(180deg, #f2ede2 0%, #dfd6c4 100%);
+      --front-frame-border: rgba(89, 97, 107, 0.22);
+    }
+
+    .postcard-front-art.frame-sea-voyage {
+      --front-frame-gap: linear-gradient(180deg, #d7e4e2 0%, #c2d5d0 100%);
+      --front-frame-surface: linear-gradient(180deg, #edf6f4 0%, #d6e7e3 100%);
+      --front-frame-border: rgba(88, 129, 127, 0.22);
+    }
+
     .front {
       background: #f4eee5;
     }
@@ -1381,6 +1639,19 @@ VIEW_HTML = r"""
 <body>
   {% set sender_name = postcard['from_name']|default('', true)|trim %}
   {% set recipient_name = postcard['to_name']|default('', true)|trim %}
+  {% macro render_front_art(extra_class='') -%}
+    <div class="postcard-front-art {{ postcard_layout_class }} {{ postcard_frame_class }} {{ extra_class }}">
+      {% for slot in front_slots %}
+        <div class="postcard-front-slot {{ slot.slot_class }}">
+          <div class="postcard-front-slot-media">
+            {% if slot.image_url %}
+              <img src="{{ slot.image_url }}" alt="Front image {{ loop.index }}" crossorigin="anonymous" referrerpolicy="no-referrer">
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {%- endmacro %}
   <div class="sun-glow"></div>
   <div class="sun-rays"></div>
   <div class="sea-haze"></div>
@@ -1392,15 +1663,15 @@ VIEW_HTML = r"""
   <div class="stage-shadow"></div>
   <div class="keepsake-preview" aria-hidden="true">
     <div class="keepsake-preview-stage">
-      <div class="keepsake-preview-card">
-        <div class="keepsake-preview-inner">
-          <div class="keepsake-preview-face keepsake-preview-front">
-            <img src="{{ postcard['front_image_url'] }}" alt="">
+        <div class="keepsake-preview-card">
+          <div class="keepsake-preview-inner">
+            <div class="keepsake-preview-face keepsake-preview-front">
+              {{ render_front_art('postcard-front-art--preview') }}
+            </div>
+            <div class="keepsake-preview-face keepsake-preview-back">
+              <img src="{{ postcard['back_image_url'] }}" alt="">
+            </div>
           </div>
-          <div class="keepsake-preview-face keepsake-preview-back">
-            <img src="{{ postcard['back_image_url'] }}" alt="">
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -1434,12 +1705,19 @@ VIEW_HTML = r"""
 
             <div class="postcard" id="postcard">
               <article class="face front">
-                <img src="{{ postcard['front_image_url'] }}" alt="Front image" crossorigin="anonymous" referrerpolicy="no-referrer">
+                {{ render_front_art('postcard-front-art--main') }}
               </article>
 
               <article class="face back">
                 <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
-                <div class="message-area" id="messageArea" data-message="{{ postcard['message']|e }}">
+                <div
+                  class="message-area"
+                  id="messageArea"
+                  data-message="{{ postcard['message']|e }}"
+                  data-message-font-family="{{ message_style.font_family|e }}"
+                  data-message-font-weight="{{ message_style.font_weight|e }}"
+                  data-message-color="{{ message_style.color|e }}"
+                >
                   <canvas class="message-canvas" id="messageCanvas"></canvas>
                   <div class="message-lines" id="messageLines">
                     {% for line in message_lines %}
@@ -1766,6 +2044,9 @@ VIEW_HTML = r"""
       if (!messageArea || !messageCanvas) return;
 
       const text = (messageArea.dataset.message || '').replace(/\s+/g, ' ').trim();
+      const messageFontFamily = messageArea.dataset.messageFontFamily || '"Caveat", "Brush Script MT", cursive';
+      const messageFontWeight = messageArea.dataset.messageFontWeight || '600';
+      const selectedMessageColor = messageArea.dataset.messageColor || '#a86f7d';
       const width = messageArea.clientWidth;
       const height = messageArea.clientHeight;
 
@@ -1798,7 +2079,7 @@ VIEW_HTML = r"""
       let lineGap = fontSize * 0.3;
 
       while (fontSize >= minFont) {
-        ctx.font = `600 ${fontSize}px "Caveat", "Brush Script MT", cursive`;
+        ctx.font = `${messageFontWeight} ${fontSize}px ${messageFontFamily}`;
         lines = wrapCanvasLines(ctx, text, maxWidth);
         const metrics = ctx.measureText('AgjpqyQ');
         ascent = metrics.actualBoundingBoxAscent || fontSize * 0.78;
@@ -1814,9 +2095,9 @@ VIEW_HTML = r"""
         fontSize -= 0.5;
       }
 
-      ctx.font = `600 ${Math.max(fontSize, minFont)}px "Caveat", "Brush Script MT", cursive`;
+      ctx.font = `${messageFontWeight} ${Math.max(fontSize, minFont)}px ${messageFontFamily}`;
       const sampledBackground = sampleMessageBackgroundColor();
-      ctx.fillStyle = sampledBackground ? deriveInkColorFromBackground(sampledBackground) : '#a86f7d';
+      ctx.fillStyle = sampledBackground ? deriveInkColorFromBackground(sampledBackground) : selectedMessageColor;
       ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
       ctx.shadowColor = 'rgba(255, 255, 255, 0.16)';
@@ -2127,6 +2408,20 @@ def ensure_db():
         conn.execute("ALTER TABLE postcards ADD COLUMN from_name TEXT NOT NULL DEFAULT ''")
     if "to_name" not in existing_columns:
         conn.execute("ALTER TABLE postcards ADD COLUMN to_name TEXT NOT NULL DEFAULT ''")
+    if "front_image_urls" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN front_image_urls TEXT NOT NULL DEFAULT '[]'")
+    if "postcard_layout" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_layout TEXT NOT NULL DEFAULT 'Single Photo'")
+    if "postcard_layout_key" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_layout_key TEXT NOT NULL DEFAULT 'single'")
+    if "postcard_frame" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_frame TEXT NOT NULL DEFAULT 'Classic Ivory'")
+    if "postcard_frame_key" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_frame_key TEXT NOT NULL DEFAULT 'classic-ivory'")
+    if "postcard_font" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_font TEXT NOT NULL DEFAULT 'Caveat'")
+    if "postcard_font_key" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_font_key TEXT NOT NULL DEFAULT 'caveat'")
 
     conn.execute(
         """
@@ -2267,6 +2562,13 @@ FRONT_IMAGE_URL_PROPERTY_NAMES = {
     "front image link",
 }
 
+FRONT_IMAGE_URLS_PROPERTY_NAMES = {
+    "front image urls",
+    "uploaded front image urls",
+    "front images",
+    "uploaded front images",
+}
+
 BACK_IMAGE_URL_PROPERTY_NAMES = {
     "selected postcard back image",
     "back image url",
@@ -2288,6 +2590,48 @@ TO_PROPERTY_NAMES = {
     "to name",
     "recipient",
     "recipient name",
+}
+
+LAYOUT_PROPERTY_NAMES = {
+    "postcard layout",
+    "layout",
+}
+
+LAYOUT_KEY_PROPERTY_NAMES = {
+    "postcard layout key",
+    "layout key",
+}
+
+FRAME_PROPERTY_NAMES = {
+    "postcard frame",
+    "frame",
+    "selected postcard frame",
+    "selected frame",
+}
+
+FRAME_KEY_PROPERTY_NAMES = {
+    "postcard frame key",
+    "frame key",
+    "selected postcard frame key",
+    "selected frame key",
+}
+
+FONT_PROPERTY_NAMES = {
+    "postcard font",
+    "postcard message font",
+    "message font",
+    "font",
+    "selected postcard font",
+    "selected font",
+}
+
+FONT_KEY_PROPERTY_NAMES = {
+    "postcard font key",
+    "postcard message font key",
+    "message font key",
+    "font key",
+    "selected postcard font key",
+    "selected font key",
 }
 
 PROPERTY_CONTAINER_KEYS = (
@@ -2394,27 +2738,76 @@ def pick_property_values(named_values):
     to_name = ""
     front_image_url = ""
     back_image_url = ""
+    front_image_urls = []
+    numbered_front_images = {}
+    postcard_layout = ""
+    postcard_layout_key = ""
+    postcard_frame = ""
+    postcard_frame_key = ""
+    postcard_font = ""
+    postcard_font_key = ""
 
     for prop_name, prop_value in named_values:
         normalized_prop_name = normalize_property_name(prop_name)
+        front_image_index = extract_front_image_index(normalized_prop_name)
 
         if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
             message = prop_value
         elif normalized_prop_name in FRONT_IMAGE_URL_PROPERTY_NAMES and prop_value and not front_image_url:
             front_image_url = prop_value
+        elif normalized_prop_name in FRONT_IMAGE_URLS_PROPERTY_NAMES and prop_value:
+            for image_url in split_image_url_values(prop_value):
+                if image_url not in front_image_urls:
+                    front_image_urls.append(image_url)
         elif normalized_prop_name in BACK_IMAGE_URL_PROPERTY_NAMES and prop_value and not back_image_url:
             back_image_url = prop_value
         elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
             from_name = prop_value
         elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
             to_name = prop_value
+        elif normalized_prop_name in LAYOUT_PROPERTY_NAMES and prop_value and not postcard_layout:
+            postcard_layout = prop_value
+        elif normalized_prop_name in LAYOUT_KEY_PROPERTY_NAMES and prop_value and not postcard_layout_key:
+            postcard_layout_key = prop_value
+        elif normalized_prop_name in FRAME_PROPERTY_NAMES and prop_value and not postcard_frame:
+            postcard_frame = prop_value
+        elif normalized_prop_name in FRAME_KEY_PROPERTY_NAMES and prop_value and not postcard_frame_key:
+            postcard_frame_key = prop_value
+        elif normalized_prop_name in FONT_PROPERTY_NAMES and prop_value and not postcard_font:
+            postcard_font = prop_value
+        elif normalized_prop_name in FONT_KEY_PROPERTY_NAMES and prop_value and not postcard_font_key:
+            postcard_font_key = prop_value
+        elif front_image_index is not None and prop_value:
+            numbered_front_images[front_image_index] = prop_value
+
+    for index in sorted(numbered_front_images):
+        image_url = numbered_front_images[index]
+        if image_url and image_url not in front_image_urls:
+            front_image_urls.append(image_url)
+
+    if front_image_url and front_image_url not in front_image_urls:
+        front_image_urls.insert(0, front_image_url)
+
+    if front_image_urls and not front_image_url:
+        front_image_url = front_image_urls[0]
+
+    normalized_layout_key = normalize_postcard_layout_key(postcard_layout_key or postcard_layout)
+    normalized_frame_key = normalize_postcard_frame_key(postcard_frame_key or postcard_frame)
+    normalized_font_key = normalize_postcard_font_key(postcard_font_key or postcard_font)
 
     return {
         "message": message,
         "from_name": from_name,
         "to_name": to_name,
         "front_image_url": front_image_url,
+        "front_image_urls": front_image_urls[:5],
         "back_image_url": back_image_url,
+        "postcard_layout": postcard_layout or POSTCARD_LAYOUT_PRESETS[normalized_layout_key]["label"],
+        "postcard_layout_key": normalized_layout_key,
+        "postcard_frame": postcard_frame or POSTCARD_FRAME_PRESETS[normalized_frame_key]["label"],
+        "postcard_frame_key": normalized_frame_key,
+        "postcard_font": postcard_font or POSTCARD_FONT_PRESETS[normalized_font_key]["label"],
+        "postcard_font_key": normalized_font_key,
     }
 
 
@@ -2426,6 +2819,75 @@ def normalize_property_name(prop_name: str) -> str:
         normalized = bracket_match.group(1)
 
     return normalized.casefold().replace("_", " ").replace("-", " ").strip()
+
+
+def split_image_url_values(raw_value):
+    raw_text = str(raw_value or "").strip()
+    if not raw_text:
+        return []
+
+    try:
+        parsed = json.loads(raw_text)
+        if isinstance(parsed, list):
+            return [
+                str(item).strip()
+                for item in parsed
+                if str(item or "").strip()
+            ]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+
+    parts = re.split(r"\s*\|\s*|\s*\n\s*", raw_text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def extract_front_image_index(normalized_prop_name: str):
+    for pattern in (
+        r"front image url (\d+)",
+        r"front image (\d+)",
+        r"uploaded front image url (\d+)",
+        r"uploaded front image (\d+)",
+    ):
+        match = re.fullmatch(pattern, normalized_prop_name)
+        if match:
+            return max(0, int(match.group(1)) - 1)
+    return None
+
+
+def normalize_postcard_layout_key(value: str) -> str:
+    normalized = str(value or "").strip().casefold().replace("_", "-")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return POSTCARD_LAYOUT_ALIASES.get(normalized, "single")
+
+
+def normalize_postcard_frame_key(value: str) -> str:
+    normalized = str(value or "").strip().casefold().replace("_", "-")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return POSTCARD_FRAME_ALIASES.get(normalized, "classic-ivory")
+
+
+def normalize_postcard_font_key(value: str) -> str:
+    normalized = str(value or "").strip().casefold().replace("_", "-")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return POSTCARD_FONT_ALIASES.get(normalized, "caveat")
+
+
+def load_front_image_urls(raw_value, fallback_url: str = ""):
+    urls = split_image_url_values(raw_value)
+    if fallback_url:
+        fallback_url = str(fallback_url).strip()
+        if fallback_url and fallback_url not in urls:
+            urls.insert(0, fallback_url)
+    return urls[:5]
+
+
+def resolve_message_style(font_key: str):
+    normalized_key = normalize_postcard_font_key(font_key)
+    message_style = dict(POSTCARD_MESSAGE_STYLE)
+    message_style.update(POSTCARD_FONT_PRESETS.get(normalized_key, {}))
+    message_style["key"] = normalized_key
+    message_style["label"] = POSTCARD_FONT_PRESETS.get(normalized_key, {}).get("label", "Caveat")
+    return message_style
 
 
 def slugify_name_part(value: str) -> str:
@@ -2512,7 +2974,14 @@ def extract_postcard_details(payload):
     from_name = order_level_values["from_name"]
     to_name = order_level_values["to_name"]
     front_image_url = order_level_values["front_image_url"]
+    front_image_urls = list(order_level_values["front_image_urls"])
     back_image_url = order_level_values["back_image_url"]
+    postcard_layout = order_level_values["postcard_layout"]
+    postcard_layout_key = order_level_values["postcard_layout_key"]
+    postcard_frame = order_level_values["postcard_frame"]
+    postcard_frame_key = order_level_values["postcard_frame_key"]
+    postcard_font = order_level_values["postcard_font"]
+    postcard_font_key = order_level_values["postcard_font_key"]
     product_title = ""
 
     for item in payload.get("line_items", []):
@@ -2532,6 +3001,11 @@ def extract_postcard_details(payload):
             if item_product_title:
                 product_title = item_product_title
 
+        if item_values["front_image_urls"] and not front_image_urls:
+            front_image_urls = list(item_values["front_image_urls"])
+            if item_product_title:
+                product_title = item_product_title
+
         if item_values["back_image_url"] and not back_image_url:
             back_image_url = item_values["back_image_url"]
             if item_product_title:
@@ -2543,18 +3017,47 @@ def extract_postcard_details(payload):
         if item_values["to_name"] and not to_name:
             to_name = item_values["to_name"]
 
-    if not message or not from_name or not to_name or not front_image_url or not back_image_url:
+        if item_values["postcard_layout_key"] and postcard_layout_key == "single":
+            postcard_layout_key = item_values["postcard_layout_key"]
+            postcard_layout = item_values["postcard_layout"]
+
+        if item_values["postcard_frame_key"] and postcard_frame_key == "classic-ivory":
+            postcard_frame_key = item_values["postcard_frame_key"]
+            postcard_frame = item_values["postcard_frame"]
+
+        if item_values["postcard_font_key"] and postcard_font_key == "caveat":
+            postcard_font_key = item_values["postcard_font_key"]
+            postcard_font = item_values["postcard_font"]
+
+    if not message or not from_name or not to_name or not front_image_url or not back_image_url or not front_image_urls:
         deep_values = pick_property_values(iter_named_values_deep(payload))
         if deep_values["message"] and not message:
             message = deep_values["message"]
         if deep_values["front_image_url"] and not front_image_url:
             front_image_url = deep_values["front_image_url"]
+        if deep_values["front_image_urls"] and not front_image_urls:
+            front_image_urls = list(deep_values["front_image_urls"])
         if deep_values["back_image_url"] and not back_image_url:
             back_image_url = deep_values["back_image_url"]
         if deep_values["from_name"] and not from_name:
             from_name = deep_values["from_name"]
         if deep_values["to_name"] and not to_name:
             to_name = deep_values["to_name"]
+        if deep_values["postcard_layout_key"] and postcard_layout_key == "single":
+            postcard_layout_key = deep_values["postcard_layout_key"]
+            postcard_layout = deep_values["postcard_layout"]
+        if deep_values["postcard_frame_key"] and postcard_frame_key == "classic-ivory":
+            postcard_frame_key = deep_values["postcard_frame_key"]
+            postcard_frame = deep_values["postcard_frame"]
+        if deep_values["postcard_font_key"] and postcard_font_key == "caveat":
+            postcard_font_key = deep_values["postcard_font_key"]
+            postcard_font = deep_values["postcard_font"]
+
+    if front_image_urls and not front_image_url:
+        front_image_url = front_image_urls[0]
+
+    if front_image_url and front_image_url not in front_image_urls:
+        front_image_urls.insert(0, front_image_url)
 
     return {
         "order_id": order_id,
@@ -2564,7 +3067,14 @@ def extract_postcard_details(payload):
         "from_name": from_name,
         "to_name": to_name,
         "front_image_url": front_image_url,
+        "front_image_urls": front_image_urls[:5],
         "back_image_url": back_image_url,
+        "postcard_layout": postcard_layout,
+        "postcard_layout_key": postcard_layout_key,
+        "postcard_frame": postcard_frame,
+        "postcard_frame_key": postcard_frame_key,
+        "postcard_font": postcard_font,
+        "postcard_font_key": postcard_font_key,
     }
 
 
@@ -2643,7 +3153,14 @@ def insert_postcard(details, assets):
                     from_name = ?,
                     to_name = ?,
                     front_image_url = ?,
-                    back_image_url = ?
+                    back_image_url = ?,
+                    front_image_urls = ?,
+                    postcard_layout = ?,
+                    postcard_layout_key = ?,
+                    postcard_frame = ?,
+                    postcard_frame_key = ?,
+                    postcard_font = ?,
+                    postcard_font_key = ?
                 WHERE id = ?
                 """,
                 (
@@ -2656,6 +3173,13 @@ def insert_postcard(details, assets):
                     details["to_name"],
                     assets["front"],
                     assets["back"],
+                    json.dumps(details.get("front_image_urls", []), ensure_ascii=False),
+                    details["postcard_layout"],
+                    details["postcard_layout_key"],
+                    details["postcard_frame"],
+                    details["postcard_frame_key"],
+                    details["postcard_font"],
+                    details["postcard_font_key"],
                     existing["id"],
                 ),
             )
@@ -2675,9 +3199,16 @@ def insert_postcard(details, assets):
             to_name,
             front_image_url,
             back_image_url,
+            front_image_urls,
+            postcard_layout,
+            postcard_layout_key,
+            postcard_frame,
+            postcard_frame_key,
+            postcard_font,
+            postcard_font_key,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             details["order_id"],
@@ -2689,6 +3220,13 @@ def insert_postcard(details, assets):
             details["to_name"],
             assets["front"],
             assets["back"],
+            json.dumps(details.get("front_image_urls", []), ensure_ascii=False),
+            details["postcard_layout"],
+            details["postcard_layout_key"],
+            details["postcard_frame"],
+            details["postcard_frame_key"],
+            details["postcard_font"],
+            details["postcard_font_key"],
             utc_now_iso(),
         ),
     )
@@ -2915,12 +3453,52 @@ def view_postcard(slug):
     if not postcard:
         return "Razglednica nije pronadena.", 404
 
-    message_lines = format_message_lines(postcard["message"])
+    postcard_data = dict(postcard)
+    front_images = load_front_image_urls(
+        postcard_data.get("front_image_urls", ""),
+        postcard_data.get("front_image_url", ""),
+    )
+    postcard_layout_key = normalize_postcard_layout_key(
+        postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
+    )
+    postcard_frame_key = normalize_postcard_frame_key(
+        postcard_data.get("postcard_frame_key", "") or postcard_data.get("postcard_frame", "")
+    )
+    postcard_font_key = normalize_postcard_font_key(
+        postcard_data.get("postcard_font_key", "") or postcard_data.get("postcard_font", "")
+    )
+    message_style = resolve_message_style(postcard_font_key)
+    layout_preset = POSTCARD_LAYOUT_PRESETS[postcard_layout_key]
+    frame_preset = POSTCARD_FRAME_PRESETS[postcard_frame_key]
+
+    if front_images:
+        postcard_data["front_image_url"] = front_images[0]
+
+    postcard_data["front_image_urls"] = json.dumps(front_images, ensure_ascii=False)
+    postcard_data["postcard_layout"] = postcard_data.get("postcard_layout") or layout_preset["label"]
+    postcard_data["postcard_layout_key"] = postcard_layout_key
+    postcard_data["postcard_frame"] = postcard_data.get("postcard_frame") or frame_preset["label"]
+    postcard_data["postcard_frame_key"] = postcard_frame_key
+    postcard_data["postcard_font"] = postcard_data.get("postcard_font") or message_style["label"]
+    postcard_data["postcard_font_key"] = postcard_font_key
+
+    front_slots = [
+        {
+            "slot_class": slot_class,
+            "image_url": front_images[index] if index < len(front_images) else "",
+        }
+        for index, slot_class in enumerate(layout_preset["slot_classes"])
+    ]
+
+    message_lines = format_message_lines(postcard_data["message"])
     return render_template_string(
         VIEW_HTML,
-        postcard=postcard,
+        postcard=postcard_data,
+        front_slots=front_slots,
+        postcard_layout_class=f"is-{postcard_layout_key}",
+        postcard_frame_class=f"frame-{postcard_frame_key}",
         message_lines=message_lines,
-        message_style=POSTCARD_MESSAGE_STYLE,
+        message_style=message_style,
     )
 
 
