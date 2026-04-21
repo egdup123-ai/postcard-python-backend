@@ -22,10 +22,17 @@ POSTCARD_MESSAGE_STYLE = {
     "line_height": "1.24",
     "letter_spacing": "0.015em",
     "rotation": "0deg",
-    "top": "35.2%",
-    "left": "52.8%",
-    "width": "34.5%",
-    "height": "30.5%",
+    "top": "49.6%",
+    "left": "53.3%",
+    "width": "38.6%",
+    "height": "19.2%",
+    "min_font_size": "8",
+    "max_font_ratio": "0.27",
+    "font_scale": "1",
+    "horizontal_padding_ratio": "0.024",
+    "vertical_padding_ratio": "0.11",
+    "line_gap_ratio": "0.2",
+    "vertical_align": "0.18",
 }
 
 POSTCARD_LAYOUT_PRESETS = {
@@ -93,6 +100,11 @@ POSTCARD_FONT_PRESETS = {
         "font_weight": "600",
         "color": "#6c4a30",
         "letter_spacing": "0.015em",
+        "font_scale": "1",
+        "max_font_ratio": "0.27",
+        "min_font_size": "8",
+        "line_gap_ratio": "0.2",
+        "vertical_align": "0.18",
     },
     "dancing-script": {
         "label": "Dancing Script",
@@ -100,6 +112,11 @@ POSTCARD_FONT_PRESETS = {
         "font_weight": "600",
         "color": "#7b5641",
         "letter_spacing": "0.01em",
+        "font_scale": "0.92",
+        "max_font_ratio": "0.25",
+        "min_font_size": "7.5",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.16",
     },
     "allura": {
         "label": "Allura",
@@ -107,6 +124,11 @@ POSTCARD_FONT_PRESETS = {
         "font_weight": "400",
         "color": "#8b6170",
         "letter_spacing": "0.01em",
+        "font_scale": "0.8",
+        "max_font_ratio": "0.225",
+        "min_font_size": "7",
+        "line_gap_ratio": "0.16",
+        "vertical_align": "0.14",
     },
     "cormorant": {
         "label": "Cormorant Garamond",
@@ -114,6 +136,11 @@ POSTCARD_FONT_PRESETS = {
         "font_weight": "600",
         "color": "#775540",
         "letter_spacing": "0.008em",
+        "font_scale": "0.9",
+        "max_font_ratio": "0.245",
+        "min_font_size": "7.5",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.2",
     },
     "cinzel": {
         "label": "Cinzel",
@@ -121,6 +148,12 @@ POSTCARD_FONT_PRESETS = {
         "font_weight": "500",
         "color": "#70523d",
         "letter_spacing": "0.02em",
+        "font_scale": "0.82",
+        "max_font_ratio": "0.22",
+        "min_font_size": "7",
+        "line_gap_ratio": "0.17",
+        "vertical_align": "0.18",
+        "horizontal_padding_ratio": "0.03",
     },
 }
 
@@ -1714,9 +1747,17 @@ VIEW_HTML = r"""
                   class="message-area"
                   id="messageArea"
                   data-message="{{ postcard['message']|e }}"
+                  data-message-font-key="{{ message_style.key|e }}"
                   data-message-font-family="{{ message_style.font_family|e }}"
                   data-message-font-weight="{{ message_style.font_weight|e }}"
                   data-message-color="{{ message_style.color|e }}"
+                  data-message-font-scale="{{ message_style.font_scale|e }}"
+                  data-message-max-font-ratio="{{ message_style.max_font_ratio|e }}"
+                  data-message-min-font-size="{{ message_style.min_font_size|e }}"
+                  data-message-line-gap-ratio="{{ message_style.line_gap_ratio|e }}"
+                  data-message-horizontal-padding-ratio="{{ message_style.horizontal_padding_ratio|e }}"
+                  data-message-vertical-padding-ratio="{{ message_style.vertical_padding_ratio|e }}"
+                  data-message-vertical-align="{{ message_style.vertical_align|e }}"
                 >
                   <canvas class="message-canvas" id="messageCanvas"></canvas>
                   <div class="message-lines" id="messageLines">
@@ -2043,10 +2084,23 @@ VIEW_HTML = r"""
     function renderMessageCanvas() {
       if (!messageArea || !messageCanvas) return;
 
+      const clampNumber = (value, min, max, fallback) => {
+        const numericValue = Number.parseFloat(value);
+        if (Number.isNaN(numericValue)) return fallback;
+        return Math.min(max, Math.max(min, numericValue));
+      };
+
       const text = (messageArea.dataset.message || '').replace(/\s+/g, ' ').trim();
       const messageFontFamily = messageArea.dataset.messageFontFamily || '"Caveat", "Brush Script MT", cursive';
       const messageFontWeight = messageArea.dataset.messageFontWeight || '600';
       const selectedMessageColor = messageArea.dataset.messageColor || '#a86f7d';
+      const fontScale = clampNumber(messageArea.dataset.messageFontScale || '1', 0.65, 1.1, 1);
+      const maxFontRatio = clampNumber(messageArea.dataset.messageMaxFontRatio || '0.27', 0.16, 0.34, 0.27);
+      const minFont = clampNumber(messageArea.dataset.messageMinFontSize || '8', 6.5, 12, 8);
+      const lineGapRatio = clampNumber(messageArea.dataset.messageLineGapRatio || '0.2', 0.08, 0.34, 0.2);
+      const horizontalPaddingRatio = clampNumber(messageArea.dataset.messageHorizontalPaddingRatio || '0.024', 0.01, 0.08, 0.024);
+      const verticalPaddingRatio = clampNumber(messageArea.dataset.messageVerticalPaddingRatio || '0.11', 0.03, 0.24, 0.11);
+      const verticalAlign = clampNumber(messageArea.dataset.messageVerticalAlign || '0.18', 0, 1, 0.18);
       const width = messageArea.clientWidth;
       const height = messageArea.clientHeight;
 
@@ -2067,16 +2121,15 @@ VIEW_HTML = r"""
 
       if (!text) return;
 
-      const horizontalPadding = Math.max(3, width * 0.02);
-      const verticalPadding = Math.max(4, height * 0.08);
+      const horizontalPadding = Math.max(4, width * horizontalPaddingRatio);
+      const verticalPadding = Math.max(4, height * verticalPaddingRatio);
       const maxWidth = width - (horizontalPadding * 2);
       const availableHeight = Math.max(0, height - (verticalPadding * 2));
-      const minFont = 8;
-      let fontSize = Math.min(21, height * 0.3);
+      let fontSize = Math.min(21 * fontScale, height * maxFontRatio);
       let lines = [text];
       let ascent = fontSize * 0.76;
       let descent = fontSize * 0.28;
-      let lineGap = fontSize * 0.3;
+      let lineGap = fontSize * lineGapRatio;
 
       while (fontSize >= minFont) {
         ctx.font = `${messageFontWeight} ${fontSize}px ${messageFontFamily}`;
@@ -2084,7 +2137,7 @@ VIEW_HTML = r"""
         const metrics = ctx.measureText('AgjpqyQ');
         ascent = metrics.actualBoundingBoxAscent || fontSize * 0.78;
         descent = metrics.actualBoundingBoxDescent || fontSize * 0.32;
-        lineGap = fontSize * 0.22;
+        lineGap = fontSize * lineGapRatio;
         const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
         const widestLine = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
 
@@ -2106,7 +2159,8 @@ VIEW_HTML = r"""
       ctx.shadowOffsetY = 1;
 
       const totalHeight = (lines.length * (ascent + descent)) + (Math.max(0, lines.length - 1) * lineGap);
-      let y = verticalPadding + Math.max(0, (availableHeight - totalHeight) / 2) + ascent;
+      const freeHeight = Math.max(0, availableHeight - totalHeight);
+      let y = verticalPadding + (freeHeight * verticalAlign) + ascent;
 
       lines.forEach((line) => {
         ctx.fillText(line, horizontalPadding, y);
