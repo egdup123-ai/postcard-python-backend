@@ -3005,6 +3005,8 @@ BACKGROUND_IMAGE_PROPERTY_NAMES = {
 }
 
 RENDERED_BACK_IMAGE_PROPERTY_NAMES = {
+    "print back image url",
+    "print back image",
     "postcard rendered back image",
     "rendered back image",
     "postcard final back image",
