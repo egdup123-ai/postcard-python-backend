@@ -23,7 +23,7 @@ POSTCARD_MESSAGE_STYLE = {
     "letter_spacing": "0.015em",
     "rotation": "0deg",
     "top": "49.6%",
-    "left": "53.3%",
+    "left": "8.3%",
     "width": "38.6%",
     "height": "19.2%",
     "min_font_size": "8",
@@ -35,41 +35,104 @@ POSTCARD_MESSAGE_STYLE = {
     "vertical_align": "0.18",
 }
 
-POSTCARD_LAYOUT_PRESETS = {
-    "single": {
-        "label": "Single Photo",
-        "slot_classes": ["slot-a"],
+POSTCARD_MESSAGE_POSITIONS = {
+    "left": {
+        "top": "49.6%",
+        "left": "8.3%",
+        "width": "38.6%",
+        "height": "19.2%",
     },
-    "split": {
-        "label": "Split Duo",
-        "slot_classes": ["slot-a", "slot-b"],
-    },
-    "trio": {
-        "label": "Memory Trio",
-        "slot_classes": ["slot-a", "slot-b", "slot-c"],
-    },
-    "grid": {
-        "label": "Four Grid",
-        "slot_classes": ["slot-a", "slot-b", "slot-c", "slot-d"],
-    },
-    "story": {
-        "label": "Story Strip",
-        "slot_classes": ["slot-a", "slot-b", "slot-c", "slot-d", "slot-e"],
+    "right": {
+        "top": "49.6%",
+        "left": "53.3%",
+        "width": "38.6%",
+        "height": "19.2%",
     },
 }
 
+POSTCARD_MESSAGE_STYLE_RIGHT = {
+    "top": "49.6%",
+    "left": "53.3%",
+    "width": "38.6%",
+    "height": "19.2%",
+}
+
+SLOT_CLASS_NAMES = ["slot-a", "slot-b", "slot-c", "slot-d", "slot-e", "slot-f"]
+
+
+def make_layout_preset(label, count, class_name):
+    return {
+        "label": label,
+        "slot_classes": SLOT_CLASS_NAMES[:count],
+        "class_name": class_name,
+    }
+
+
+POSTCARD_LAYOUT_PRESETS = {
+    "single": make_layout_preset("Full Bleed", 1, "layout-single-full"),
+    "single-full": make_layout_preset("Full Bleed", 1, "layout-single-full"),
+    "single-classic": make_layout_preset("Classic Frame", 1, "layout-single-classic"),
+    "single-portrait": make_layout_preset("Portrait Focus", 1, "layout-single-portrait"),
+    "single-square": make_layout_preset("Square Crop", 1, "layout-single-square"),
+    "multi-split": make_layout_preset("Split Duo", 2, "layout-multi-split"),
+    "multi-sidebar": make_layout_preset("Sidebar Duo", 2, "layout-multi-sidebar"),
+    "multi-top-band": make_layout_preset("Top + Bottom", 3, "layout-multi-top-band"),
+    "multi-feature-stack": make_layout_preset("Feature Stack", 3, "layout-multi-feature-stack"),
+    "multi-grid": make_layout_preset("Four Grid", 4, "layout-multi-grid"),
+    "multi-window": make_layout_preset("Window Stack", 4, "layout-multi-window"),
+    "multi-strips": make_layout_preset("Vertical Strips", 4, "layout-multi-strips"),
+    "multi-mosaic": make_layout_preset("Mosaic Band", 5, "layout-multi-mosaic"),
+    "multi-story": make_layout_preset("Story Spread", 5, "layout-multi-story"),
+    "multi-cascade": make_layout_preset("Cascade", 5, "layout-multi-cascade"),
+    "multi-six-grid": make_layout_preset("Six Grid", 6, "layout-multi-six-grid"),
+    "multi-contact-sheet": make_layout_preset("Contact Sheet", 6, "layout-multi-contact-sheet"),
+    "multi-gallery-ribbon": make_layout_preset("Gallery Ribbon", 6, "layout-multi-gallery-ribbon"),
+    "signature-hero": make_layout_preset("Signature Hero", 1, "layout-signature-hero"),
+    "signature-duo": make_layout_preset("Editorial Duo", 2, "layout-signature-duo"),
+    "signature-triptych": make_layout_preset("Three Panel", 3, "layout-signature-triptych"),
+    "signature-poster": make_layout_preset("Poster Mix", 4, "layout-signature-poster"),
+    "signature-cinema": make_layout_preset("Cinema Frame", 2, "layout-signature-cinema"),
+    "signature-atelier": make_layout_preset("Atelier Grid", 4, "layout-signature-atelier"),
+    "signature-ribbon": make_layout_preset("Ribbon Story", 5, "layout-signature-ribbon"),
+    "signature-salon": make_layout_preset("Salon Scatter", 4, "layout-signature-salon"),
+    "signature-archive": make_layout_preset("Archive Notes", 4, "layout-signature-archive"),
+    "signature-polaroid": make_layout_preset("Polaroid Table", 4, "layout-signature-polaroid"),
+    "signature-compass": make_layout_preset("Compass Four", 4, "layout-signature-compass"),
+    "signature-collage-five": make_layout_preset("Collage Five", 5, "layout-signature-collage-five"),
+    "signature-orbit-five": make_layout_preset("Orbit Five", 5, "layout-signature-orbit-five"),
+    "signature-postcard-wall": make_layout_preset("Postcard Wall", 5, "layout-signature-postcard-wall"),
+    "signature-overlap-six": make_layout_preset("Overlap Six", 6, "layout-signature-overlap-six"),
+    "signature-scattered-six": make_layout_preset("Scattered Six", 6, "layout-signature-scattered-six"),
+    "signature-gallery-six": make_layout_preset("Gallery Six", 6, "layout-signature-gallery-six"),
+    "playful-brush-five": make_layout_preset("Brush Scatter", 5, "layout-playful-brush-five"),
+    "playful-polaroid-five": make_layout_preset("Polaroid Cascade", 5, "layout-playful-polaroid-five"),
+    "playful-flight-six": make_layout_preset("Flight Path", 6, "layout-playful-flight-six"),
+    "playful-drift-four": make_layout_preset("Soft Drift", 4, "layout-playful-drift-four"),
+    "playful-orbit-six": make_layout_preset("Orbit Scatter", 6, "layout-playful-orbit-six"),
+    "playful-diary-five": make_layout_preset("Diary Pieces", 5, "layout-playful-diary-five"),
+    "playful-wave-five": make_layout_preset("Wave Story", 5, "layout-playful-wave-five"),
+    "playful-tumble-six": make_layout_preset("Tumble Six", 6, "layout-playful-tumble-six"),
+    "playful-travel-five": make_layout_preset("Travel Notes", 5, "layout-playful-travel-five"),
+    "playful-cloud-six": make_layout_preset("Cloud Notes", 6, "layout-playful-cloud-six"),
+    "playful-tilt-four": make_layout_preset("Tilted Four", 4, "layout-playful-tilt-four"),
+    "playful-scrapbook-six": make_layout_preset("Scrapbook Six", 6, "layout-playful-scrapbook-six"),
+}
+
 POSTCARD_LAYOUT_ALIASES = {
+    **{key: key for key in POSTCARD_LAYOUT_PRESETS},
     "single photo": "single",
     "single": "single",
-    "split duo": "split",
-    "split": "split",
-    "memory trio": "trio",
-    "trio": "trio",
-    "four grid": "grid",
-    "grid": "grid",
-    "story strip": "story",
-    "story": "story",
-    "strip": "story",
+    "split": "multi-split",
+    "split duo": "multi-split",
+    "memory trio": "multi-top-band",
+    "trio": "multi-top-band",
+    "four grid": "multi-grid",
+    "grid": "multi-grid",
+    "story strip": "multi-story",
+    "story": "multi-story",
+    "strip": "multi-story",
+    "collection layout": "single",
+    "freeform canvas": "single",
 }
 
 POSTCARD_FRAME_PRESETS = {
@@ -155,6 +218,66 @@ POSTCARD_FONT_PRESETS = {
         "vertical_align": "0.18",
         "horizontal_padding_ratio": "0.03",
     },
+    "romantic-script": {
+        "label": "Romantic script",
+        "font_family": '"Snell Roundhand", "Segoe Script", "Brush Script MT", cursive',
+        "font_weight": "500",
+        "color": "#6c4a30",
+        "letter_spacing": "0.012em",
+        "font_scale": "0.9",
+        "max_font_ratio": "0.24",
+        "min_font_size": "6",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.16",
+    },
+    "handwritten-note": {
+        "label": "Handwritten note",
+        "font_family": '"Segoe Print", "Bradley Hand", "Marker Felt", cursive',
+        "font_weight": "400",
+        "color": "#6c4a30",
+        "letter_spacing": "0.006em",
+        "font_scale": "0.88",
+        "max_font_ratio": "0.235",
+        "min_font_size": "6",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.16",
+    },
+    "elegant-signature": {
+        "label": "Elegant signature",
+        "font_family": '"Monotype Corsiva", "Apple Chancery", "URW Chancery L", cursive',
+        "font_weight": "400",
+        "color": "#6c4a30",
+        "letter_spacing": "0.014em",
+        "font_scale": "0.86",
+        "max_font_ratio": "0.23",
+        "min_font_size": "6",
+        "line_gap_ratio": "0.17",
+        "vertical_align": "0.15",
+    },
+    "classic-serif": {
+        "label": "Classic serif",
+        "font_family": '"Palatino Linotype", "Book Antiqua", Georgia, serif',
+        "font_weight": "400",
+        "color": "#5d4738",
+        "letter_spacing": "0.006em",
+        "font_scale": "1",
+        "max_font_ratio": "0.255",
+        "min_font_size": "6",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.18",
+    },
+    "editorial-chic": {
+        "label": "Editorial chic",
+        "font_family": '"Didot", "Bodoni MT", "Times New Roman", serif',
+        "font_weight": "500",
+        "color": "#5d4738",
+        "letter_spacing": "0.012em",
+        "font_scale": "0.94",
+        "max_font_ratio": "0.245",
+        "min_font_size": "6",
+        "line_gap_ratio": "0.18",
+        "vertical_align": "0.18",
+    },
 }
 
 POSTCARD_FONT_ALIASES = {
@@ -163,12 +286,20 @@ POSTCARD_FONT_ALIASES = {
     "dancing script": "dancing-script",
     "dancing-script": "dancing-script",
     "allura": "allura",
-    "romantic script": "allura",
+    "romantic script": "romantic-script",
+    "romantic-script": "romantic-script",
+    "handwritten note": "handwritten-note",
+    "handwritten-note": "handwritten-note",
+    "elegant signature": "elegant-signature",
+    "elegant-signature": "elegant-signature",
     "cormorant": "cormorant",
     "cormorant garamond": "cormorant",
     "editorial serif": "cormorant",
     "cinzel": "cinzel",
-    "classic serif": "cinzel",
+    "classic serif": "classic-serif",
+    "classic-serif": "classic-serif",
+    "editorial chic": "editorial-chic",
+    "editorial-chic": "editorial-chic",
 }
 
 TEMPLATES = {
@@ -1012,6 +1143,17 @@ VIEW_HTML = r"""
       z-index: 0;
     }
 
+    .postcard-front-background {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      pointer-events: none;
+      z-index: 0;
+    }
+
     .postcard-front-art.is-single {
       grid-template-columns: 1fr;
       grid-template-rows: 1fr;
@@ -1036,6 +1178,218 @@ VIEW_HTML = r"""
       grid-template-columns: repeat(6, 1fr);
       grid-template-rows: 1fr 1fr;
     }
+
+    .postcard-front-art[class*="layout-"] {
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      gap: 8px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .postcard-front-art.layout-single-full .slot-a,
+    .postcard-front-art.layout-signature-hero .slot-a { grid-column: 1 / 13; grid-row: 1 / 9; }
+    .postcard-front-art.layout-single-classic .slot-a { grid-column: 2 / 12; grid-row: 2 / 8; }
+    .postcard-front-art.layout-single-portrait .slot-a { grid-column: 4 / 10; grid-row: 1 / 9; }
+    .postcard-front-art.layout-single-square .slot-a { grid-column: 3 / 11; grid-row: 1 / 8; }
+    .postcard-front-art.layout-multi-split .slot-a { grid-column: 1 / 7; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-split .slot-b { grid-column: 7 / 13; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-sidebar .slot-a { grid-column: 1 / 9; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-sidebar .slot-b { grid-column: 9 / 13; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-top-band .slot-a { grid-column: 1 / 7; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-top-band .slot-b { grid-column: 7 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-top-band .slot-c { grid-column: 1 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-feature-stack .slot-a { grid-column: 1 / 8; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-feature-stack .slot-b { grid-column: 8 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-feature-stack .slot-c { grid-column: 8 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-grid .slot-a { grid-column: 1 / 7; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-grid .slot-b { grid-column: 7 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-grid .slot-c { grid-column: 1 / 7; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-grid .slot-d { grid-column: 7 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-window .slot-a { grid-column: 1 / 9; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-window .slot-b { grid-column: 9 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-window .slot-c { grid-column: 9 / 13; grid-row: 4 / 6; }
+    .postcard-front-art.layout-multi-window .slot-d { grid-column: 9 / 13; grid-row: 6 / 9; }
+    .postcard-front-art.layout-multi-strips .slot-a { grid-column: 1 / 4; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-strips .slot-b { grid-column: 4 / 7; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-strips .slot-c { grid-column: 7 / 10; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-strips .slot-d { grid-column: 10 / 13; grid-row: 1 / 9; }
+    .postcard-front-art.layout-multi-mosaic .slot-a { grid-column: 1 / 5; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-mosaic .slot-b { grid-column: 5 / 9; grid-row: 1 / 3; }
+    .postcard-front-art.layout-multi-mosaic .slot-c { grid-column: 9 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-mosaic .slot-d { grid-column: 5 / 9; grid-row: 3 / 5; }
+    .postcard-front-art.layout-multi-mosaic .slot-e { grid-column: 1 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-story .slot-a { grid-column: 1 / 5; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-story .slot-b { grid-column: 5 / 9; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-story .slot-c { grid-column: 9 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-story .slot-d { grid-column: 1 / 7; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-story .slot-e { grid-column: 7 / 13; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-cascade .slot-a { grid-column: 1 / 4; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-cascade .slot-b { grid-column: 4 / 8; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-cascade .slot-c { grid-column: 8 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-cascade .slot-d { grid-column: 1 / 6; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-cascade .slot-e { grid-column: 6 / 13; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-six-grid .slot-a { grid-column: 1 / 5; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-six-grid .slot-b { grid-column: 5 / 9; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-six-grid .slot-c { grid-column: 9 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-multi-six-grid .slot-d { grid-column: 1 / 5; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-six-grid .slot-e { grid-column: 5 / 9; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-six-grid .slot-f { grid-column: 9 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-a { grid-column: 1 / 7; grid-row: 1 / 3; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-b { grid-column: 7 / 13; grid-row: 1 / 3; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-c { grid-column: 1 / 7; grid-row: 3 / 6; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-d { grid-column: 7 / 13; grid-row: 3 / 6; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-e { grid-column: 1 / 7; grid-row: 6 / 9; }
+    .postcard-front-art.layout-multi-contact-sheet .slot-f { grid-column: 7 / 13; grid-row: 6 / 9; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-a { grid-column: 1 / 7; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-b { grid-column: 7 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-c { grid-column: 1 / 4; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-d { grid-column: 4 / 7; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-e { grid-column: 7 / 10; grid-row: 4 / 9; }
+    .postcard-front-art.layout-multi-gallery-ribbon .slot-f { grid-column: 10 / 13; grid-row: 4 / 9; }
+
+    .postcard-front-art.layout-signature-duo .slot-a { grid-column: 1 / 8; grid-row: 2 / 8; }
+    .postcard-front-art.layout-signature-duo .slot-b { grid-column: 8 / 13; grid-row: 1 / 7; }
+    .postcard-front-art.layout-signature-triptych .slot-a { grid-column: 1 / 5; grid-row: 2 / 8; }
+    .postcard-front-art.layout-signature-triptych .slot-b { grid-column: 5 / 9; grid-row: 1 / 7; }
+    .postcard-front-art.layout-signature-triptych .slot-c { grid-column: 9 / 13; grid-row: 2 / 8; }
+    .postcard-front-art.layout-signature-poster .slot-a { grid-column: 2 / 6; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-poster .slot-b { grid-column: 6 / 10; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-poster .slot-c { grid-column: 10 / 13; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-poster .slot-d { grid-column: 3 / 11; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-cinema .slot-a { grid-column: 1 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-cinema .slot-b { grid-column: 3 / 11; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-atelier .slot-a { grid-column: 1 / 6; grid-row: 1 / 9; }
+    .postcard-front-art.layout-signature-atelier .slot-b { grid-column: 6 / 10; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-atelier .slot-c { grid-column: 10 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-atelier .slot-d { grid-column: 6 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-ribbon .slot-a { grid-column: 1 / 8; grid-row: 1 / 6; }
+    .postcard-front-art.layout-signature-ribbon .slot-b { grid-column: 8 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-ribbon .slot-c { grid-column: 8 / 13; grid-row: 4 / 6; }
+    .postcard-front-art.layout-signature-ribbon .slot-d { grid-column: 1 / 5; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-ribbon .slot-e { grid-column: 5 / 13; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-salon .slot-a { grid-column: 1 / 7; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-salon .slot-b { grid-column: 7 / 13; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-salon .slot-c { grid-column: 2 / 6; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-salon .slot-d { grid-column: 6 / 12; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-archive .slot-a { grid-column: 1 / 5; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-archive .slot-b { grid-column: 5 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-archive .slot-c { grid-column: 1 / 8; grid-row: 4 / 9; }
+    .postcard-front-art.layout-signature-archive .slot-d { grid-column: 8 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-polaroid .slot-a { grid-column: 2 / 6; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-polaroid .slot-b { grid-column: 7 / 12; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-polaroid .slot-c { grid-column: 1 / 7; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-polaroid .slot-d { grid-column: 7 / 13; grid-row: 4 / 9; }
+    .postcard-front-art.layout-signature-compass .slot-a { grid-column: 1 / 6; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-compass .slot-b { grid-column: 7 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-compass .slot-c { grid-column: 2 / 7; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-compass .slot-d { grid-column: 8 / 12; grid-row: 4 / 8; }
+    .postcard-front-art.layout-signature-collage-five .slot-a { grid-column: 1 / 7; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-collage-five .slot-b { grid-column: 7 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-collage-five .slot-c { grid-column: 1 / 5; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-collage-five .slot-d { grid-column: 5 / 9; grid-row: 4 / 8; }
+    .postcard-front-art.layout-signature-collage-five .slot-e { grid-column: 9 / 13; grid-row: 4 / 9; }
+    .postcard-front-art.layout-signature-orbit-five .slot-a { grid-column: 4 / 10; grid-row: 3 / 7; }
+    .postcard-front-art.layout-signature-orbit-five .slot-b { grid-column: 1 / 5; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-orbit-five .slot-c { grid-column: 8 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-orbit-five .slot-d { grid-column: 1 / 6; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-orbit-five .slot-e { grid-column: 8 / 13; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-postcard-wall .slot-a { grid-column: 1 / 5; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-postcard-wall .slot-b { grid-column: 5 / 9; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-postcard-wall .slot-c { grid-column: 9 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-postcard-wall .slot-d { grid-column: 2 / 7; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-postcard-wall .slot-e { grid-column: 7 / 12; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-overlap-six .slot-a { grid-column: 1 / 6; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-overlap-six .slot-b { grid-column: 5 / 10; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-overlap-six .slot-c { grid-column: 9 / 13; grid-row: 2 / 6; }
+    .postcard-front-art.layout-signature-overlap-six .slot-d { grid-column: 1 / 5; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-overlap-six .slot-e { grid-column: 5 / 9; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-overlap-six .slot-f { grid-column: 9 / 13; grid-row: 6 / 9; }
+    .postcard-front-art.layout-signature-scattered-six .slot-a { grid-column: 1 / 4; grid-row: 2 / 5; }
+    .postcard-front-art.layout-signature-scattered-six .slot-b { grid-column: 4 / 8; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-scattered-six .slot-c { grid-column: 8 / 13; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-scattered-six .slot-d { grid-column: 1 / 6; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-scattered-six .slot-e { grid-column: 6 / 10; grid-row: 4 / 8; }
+    .postcard-front-art.layout-signature-scattered-six .slot-f { grid-column: 10 / 13; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-gallery-six .slot-a { grid-column: 1 / 7; grid-row: 1 / 5; }
+    .postcard-front-art.layout-signature-gallery-six .slot-b { grid-column: 7 / 13; grid-row: 1 / 4; }
+    .postcard-front-art.layout-signature-gallery-six .slot-c { grid-column: 1 / 4; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-gallery-six .slot-d { grid-column: 4 / 8; grid-row: 5 / 9; }
+    .postcard-front-art.layout-signature-gallery-six .slot-e { grid-column: 8 / 10; grid-row: 4 / 9; }
+    .postcard-front-art.layout-signature-gallery-six .slot-f { grid-column: 10 / 13; grid-row: 4 / 9; }
+
+    .postcard-front-art[class*="layout-playful-"] { display: block; gap: 0; background: #fff; }
+    .postcard-front-art[class*="layout-playful-"] .postcard-front-slot {
+      position: absolute !important;
+      transform: rotate(var(--front-rotate, 0deg));
+      transform-origin: center;
+      border: 0;
+      background: #dfe7ff !important;
+    }
+    .postcard-front-art[class*="layout-playful-"] .postcard-front-slot-media { background: #dfe7ff !important; }
+    .postcard-front-art.layout-playful-brush-five .slot-a { left: 8%; top: 7%; width: 23%; height: 42%; --front-rotate: -5deg; }
+    .postcard-front-art.layout-playful-brush-five .slot-b { left: 39%; top: 23%; width: 23%; height: 39%; --front-rotate: 4deg; }
+    .postcard-front-art.layout-playful-brush-five .slot-c { left: 71%; top: 10%; width: 20%; height: 38%; --front-rotate: 4deg; }
+    .postcard-front-art.layout-playful-brush-five .slot-d { left: 9%; top: 61%; width: 25%; height: 27%; --front-rotate: 9deg; }
+    .postcard-front-art.layout-playful-brush-five .slot-e { left: 70%; top: 60%; width: 23%; height: 25%; --front-rotate: -4deg; }
+    .postcard-front-art.layout-playful-polaroid-five .slot-a { left: 4%; top: 13%; width: 29%; height: 56%; --front-rotate: -10deg; }
+    .postcard-front-art.layout-playful-polaroid-five .slot-b { left: 35%; top: 4%; width: 27%; height: 56%; --front-rotate: 4deg; z-index: 4; }
+    .postcard-front-art.layout-playful-polaroid-five .slot-c { left: 64%; top: 14%; width: 32%; height: 48%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-polaroid-five .slot-d { left: 17%; top: 62%; width: 28%; height: 32%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-polaroid-five .slot-e { left: 55%; top: 58%; width: 34%; height: 33%; --front-rotate: -9deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-a { left: 7%; top: 8%; width: 27%; height: 31%; --front-rotate: -8deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-b { left: 67%; top: 10%; width: 26%; height: 31%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-c { left: 4%; top: 42%; width: 28%; height: 28%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-d { left: 70%; top: 44%; width: 24%; height: 28%; --front-rotate: -5deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-e { left: 10%; top: 72%; width: 29%; height: 23%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-flight-six .slot-f { left: 43%; top: 71%; width: 28%; height: 23%; --front-rotate: 9deg; }
+    .postcard-front-art.layout-playful-drift-four .slot-a { left: 10%; top: 12%; width: 28%; height: 36%; --front-rotate: -8deg; }
+    .postcard-front-art.layout-playful-drift-four .slot-b { left: 53%; top: 9%; width: 32%; height: 34%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-drift-four .slot-c { left: 18%; top: 58%; width: 29%; height: 30%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-drift-four .slot-d { left: 60%; top: 55%; width: 27%; height: 30%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-a { left: 39%; top: 27%; width: 24%; height: 36%; --front-rotate: 3deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-b { left: 12%; top: 8%; width: 23%; height: 28%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-c { left: 65%; top: 9%; width: 23%; height: 28%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-d { left: 8%; top: 55%; width: 25%; height: 29%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-e { left: 67%; top: 56%; width: 24%; height: 28%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-orbit-six .slot-f { left: 38%; top: 72%; width: 25%; height: 21%; --front-rotate: -3deg; }
+    .postcard-front-art.layout-playful-diary-five .slot-a { left: 6%; top: 9%; width: 31%; height: 31%; --front-rotate: 5deg; }
+    .postcard-front-art.layout-playful-diary-five .slot-b { left: 42%; top: 8%; width: 24%; height: 42%; --front-rotate: -5deg; }
+    .postcard-front-art.layout-playful-diary-five .slot-c { left: 69%; top: 17%; width: 24%; height: 28%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-diary-five .slot-d { left: 13%; top: 55%; width: 32%; height: 30%; --front-rotate: -8deg; }
+    .postcard-front-art.layout-playful-diary-five .slot-e { left: 52%; top: 56%; width: 34%; height: 29%; --front-rotate: 5deg; }
+    .postcard-front-art.layout-playful-wave-five .slot-a { left: 7%; top: 17%; width: 23%; height: 30%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-wave-five .slot-b { left: 30%; top: 35%; width: 22%; height: 30%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-wave-five .slot-c { left: 51%; top: 15%; width: 24%; height: 32%; --front-rotate: -5deg; }
+    .postcard-front-art.layout-playful-wave-five .slot-d { left: 70%; top: 49%; width: 23%; height: 29%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-wave-five .slot-e { left: 13%; top: 68%; width: 27%; height: 23%; --front-rotate: -4deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-a { left: 5%; top: 8%; width: 24%; height: 32%; --front-rotate: -10deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-b { left: 29%; top: 12%; width: 25%; height: 29%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-c { left: 58%; top: 8%; width: 30%; height: 34%; --front-rotate: 9deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-d { left: 10%; top: 50%; width: 28%; height: 29%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-e { left: 43%; top: 48%; width: 23%; height: 34%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-tumble-six .slot-f { left: 70%; top: 55%; width: 22%; height: 29%; --front-rotate: -8deg; }
+    .postcard-front-art.layout-playful-travel-five .slot-a { left: 8%; top: 10%; width: 30%; height: 39%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-travel-five .slot-b { left: 43%; top: 9%; width: 25%; height: 31%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-travel-five .slot-c { left: 69%; top: 25%; width: 24%; height: 31%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-travel-five .slot-d { left: 16%; top: 61%; width: 28%; height: 28%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-travel-five .slot-e { left: 51%; top: 57%; width: 30%; height: 30%; --front-rotate: -4deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-a { left: 8%; top: 7%; width: 22%; height: 27%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-b { left: 38%; top: 9%; width: 25%; height: 28%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-c { left: 68%; top: 8%; width: 22%; height: 28%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-d { left: 17%; top: 43%; width: 24%; height: 29%; --front-rotate: -4deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-e { left: 50%; top: 42%; width: 26%; height: 30%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-cloud-six .slot-f { left: 35%; top: 72%; width: 29%; height: 21%; --front-rotate: -5deg; }
+    .postcard-front-art.layout-playful-tilt-four .slot-a { left: 9%; top: 9%; width: 34%; height: 36%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-tilt-four .slot-b { left: 56%; top: 10%; width: 32%; height: 35%; --front-rotate: 6deg; }
+    .postcard-front-art.layout-playful-tilt-four .slot-c { left: 12%; top: 57%; width: 32%; height: 31%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-tilt-four .slot-d { left: 56%; top: 55%; width: 33%; height: 32%; --front-rotate: -6deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-a { left: 6%; top: 14%; width: 28%; height: 28%; --front-rotate: -8deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-b { left: 35%; top: 6%; width: 24%; height: 35%; --front-rotate: 5deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-c { left: 62%; top: 15%; width: 31%; height: 29%; --front-rotate: 7deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-d { left: 8%; top: 55%; width: 24%; height: 30%; --front-rotate: 8deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-e { left: 37%; top: 51%; width: 25%; height: 33%; --front-rotate: -7deg; }
+    .postcard-front-art.layout-playful-scrapbook-six .slot-f { left: 66%; top: 57%; width: 25%; height: 28%; --front-rotate: -5deg; }
 
     .postcard-front-slot {
       position: relative;
@@ -1674,6 +2028,10 @@ VIEW_HTML = r"""
   {% set recipient_name = postcard['to_name']|default('', true)|trim %}
   {% macro render_front_art(extra_class='') -%}
     <div class="postcard-front-art {{ postcard_layout_class }} {{ postcard_frame_class }} {{ extra_class }}">
+      {% set front_background = postcard['postcard_background_image']|default('', true)|trim %}
+      {% if front_background %}
+        <img class="postcard-front-background" src="{{ front_background }}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer">
+      {% endif %}
       {% for slot in front_slots %}
         <div class="postcard-front-slot {{ slot.slot_class }}">
           <div class="postcard-front-slot-media">
@@ -1743,6 +2101,7 @@ VIEW_HTML = r"""
 
               <article class="face back">
                 <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
+                {% if not hide_message_overlay %}
                 <div
                   class="message-area"
                   id="messageArea"
@@ -1766,6 +2125,7 @@ VIEW_HTML = r"""
                     {% endfor %}
                   </div>
                 </div>
+                {% endif %}
               </article>
             </div>
           </button>
@@ -2476,6 +2836,12 @@ def ensure_db():
         conn.execute("ALTER TABLE postcards ADD COLUMN postcard_font TEXT NOT NULL DEFAULT 'Caveat'")
     if "postcard_font_key" not in existing_columns:
         conn.execute("ALTER TABLE postcards ADD COLUMN postcard_font_key TEXT NOT NULL DEFAULT 'caveat'")
+    if "postcard_background_image" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_background_image TEXT NOT NULL DEFAULT ''")
+    if "postcard_template" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN postcard_template TEXT NOT NULL DEFAULT ''")
+    if "rendered_back_image_url" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN rendered_back_image_url TEXT NOT NULL DEFAULT ''")
 
     conn.execute(
         """
@@ -2630,6 +2996,22 @@ BACK_IMAGE_URL_PROPERTY_NAMES = {
     "back image",
 }
 
+BACKGROUND_IMAGE_PROPERTY_NAMES = {
+    "postcard background image",
+    "background image",
+    "postcard background",
+    "front background image",
+    "selected background image",
+}
+
+RENDERED_BACK_IMAGE_PROPERTY_NAMES = {
+    "postcard rendered back image",
+    "rendered back image",
+    "postcard final back image",
+    "final back image",
+    "back image with text",
+}
+
 FROM_PROPERTY_NAMES = {
     "from",
     "from field",
@@ -2644,6 +3026,15 @@ TO_PROPERTY_NAMES = {
     "to name",
     "recipient",
     "recipient name",
+}
+
+TEMPLATE_PROPERTY_NAMES = {
+    "postcard template",
+    "product template",
+    "template",
+    "template suffix",
+    "postcard template suffix",
+    "postcard product template",
 }
 
 LAYOUT_PROPERTY_NAMES = {
@@ -2672,6 +3063,7 @@ FRAME_KEY_PROPERTY_NAMES = {
 
 FONT_PROPERTY_NAMES = {
     "postcard font",
+    "postcard font style",
     "postcard message font",
     "message font",
     "font",
@@ -2681,6 +3073,7 @@ FONT_PROPERTY_NAMES = {
 
 FONT_KEY_PROPERTY_NAMES = {
     "postcard font key",
+    "postcard font style key",
     "postcard message font key",
     "message font key",
     "font key",
@@ -2792,6 +3185,8 @@ def pick_property_values(named_values):
     to_name = ""
     front_image_url = ""
     back_image_url = ""
+    postcard_background_image = ""
+    rendered_back_image_url = ""
     front_image_urls = []
     numbered_front_images = {}
     postcard_layout = ""
@@ -2800,6 +3195,7 @@ def pick_property_values(named_values):
     postcard_frame_key = ""
     postcard_font = ""
     postcard_font_key = ""
+    postcard_template = ""
 
     for prop_name, prop_value in named_values:
         normalized_prop_name = normalize_property_name(prop_name)
@@ -2815,10 +3211,16 @@ def pick_property_values(named_values):
                     front_image_urls.append(image_url)
         elif normalized_prop_name in BACK_IMAGE_URL_PROPERTY_NAMES and prop_value and not back_image_url:
             back_image_url = prop_value
+        elif normalized_prop_name in BACKGROUND_IMAGE_PROPERTY_NAMES and prop_value and not postcard_background_image:
+            postcard_background_image = prop_value
+        elif normalized_prop_name in RENDERED_BACK_IMAGE_PROPERTY_NAMES and prop_value and not rendered_back_image_url:
+            rendered_back_image_url = prop_value
         elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
             from_name = prop_value
         elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
             to_name = prop_value
+        elif normalized_prop_name in TEMPLATE_PROPERTY_NAMES and prop_value and not postcard_template:
+            postcard_template = prop_value
         elif normalized_prop_name in LAYOUT_PROPERTY_NAMES and prop_value and not postcard_layout:
             postcard_layout = prop_value
         elif normalized_prop_name in LAYOUT_KEY_PROPERTY_NAMES and prop_value and not postcard_layout_key:
@@ -2854,14 +3256,17 @@ def pick_property_values(named_values):
         "from_name": from_name,
         "to_name": to_name,
         "front_image_url": front_image_url,
-        "front_image_urls": front_image_urls[:5],
+        "front_image_urls": front_image_urls[:6],
         "back_image_url": back_image_url,
+        "postcard_background_image": postcard_background_image,
+        "rendered_back_image_url": rendered_back_image_url,
         "postcard_layout": postcard_layout or POSTCARD_LAYOUT_PRESETS[normalized_layout_key]["label"],
         "postcard_layout_key": normalized_layout_key,
         "postcard_frame": postcard_frame or POSTCARD_FRAME_PRESETS[normalized_frame_key]["label"],
         "postcard_frame_key": normalized_frame_key,
         "postcard_font": postcard_font or POSTCARD_FONT_PRESETS[normalized_font_key]["label"],
         "postcard_font_key": normalized_font_key,
+        "postcard_template": postcard_template,
     }
 
 
@@ -2914,6 +3319,20 @@ def normalize_postcard_layout_key(value: str) -> str:
     return POSTCARD_LAYOUT_ALIASES.get(normalized, "single")
 
 
+def infer_layout_key_from_image_count(image_count: int) -> str:
+    if image_count >= 6:
+        return "multi-six-grid"
+    if image_count == 5:
+        return "multi-story"
+    if image_count == 4:
+        return "multi-grid"
+    if image_count == 3:
+        return "multi-top-band"
+    if image_count == 2:
+        return "multi-split"
+    return "single"
+
+
 def normalize_postcard_frame_key(value: str) -> str:
     normalized = str(value or "").strip().casefold().replace("_", "-")
     normalized = re.sub(r"\s+", " ", normalized).strip()
@@ -2926,21 +3345,35 @@ def normalize_postcard_font_key(value: str) -> str:
     return POSTCARD_FONT_ALIASES.get(normalized, "caveat")
 
 
+def resolve_message_side(postcard_data) -> str:
+    raw_values = " ".join(
+        str(postcard_data.get(key, "") or "")
+        for key in ("postcard_template", "product_title", "postcard_layout", "back_image_url")
+    ).casefold()
+
+    if "split" in raw_values or "personal" in raw_values or "perosnal" in raw_values:
+        return "right"
+
+    return "left"
+
+
 def load_front_image_urls(raw_value, fallback_url: str = ""):
     urls = split_image_url_values(raw_value)
     if fallback_url:
         fallback_url = str(fallback_url).strip()
         if fallback_url and fallback_url not in urls:
             urls.insert(0, fallback_url)
-    return urls[:5]
+    return urls[:6]
 
 
-def resolve_message_style(font_key: str):
+def resolve_message_style(font_key: str, message_side: str = "left"):
     normalized_key = normalize_postcard_font_key(font_key)
     message_style = dict(POSTCARD_MESSAGE_STYLE)
     message_style.update(POSTCARD_FONT_PRESETS.get(normalized_key, {}))
+    message_style.update(POSTCARD_MESSAGE_POSITIONS.get(message_side, POSTCARD_MESSAGE_POSITIONS["left"]))
     message_style["key"] = normalized_key
     message_style["label"] = POSTCARD_FONT_PRESETS.get(normalized_key, {}).get("label", "Caveat")
+    message_style["side"] = message_side
     return message_style
 
 
@@ -3030,12 +3463,15 @@ def extract_postcard_details(payload):
     front_image_url = order_level_values["front_image_url"]
     front_image_urls = list(order_level_values["front_image_urls"])
     back_image_url = order_level_values["back_image_url"]
+    postcard_background_image = order_level_values["postcard_background_image"]
+    rendered_back_image_url = order_level_values["rendered_back_image_url"]
     postcard_layout = order_level_values["postcard_layout"]
     postcard_layout_key = order_level_values["postcard_layout_key"]
     postcard_frame = order_level_values["postcard_frame"]
     postcard_frame_key = order_level_values["postcard_frame_key"]
     postcard_font = order_level_values["postcard_font"]
     postcard_font_key = order_level_values["postcard_font_key"]
+    postcard_template = order_level_values["postcard_template"]
     product_title = ""
 
     for item in payload.get("line_items", []):
@@ -3055,8 +3491,10 @@ def extract_postcard_details(payload):
             if item_product_title:
                 product_title = item_product_title
 
-        if item_values["front_image_urls"] and not front_image_urls:
-            front_image_urls = list(item_values["front_image_urls"])
+        if item_values["front_image_urls"]:
+            for image_url in item_values["front_image_urls"]:
+                if image_url and image_url not in front_image_urls:
+                    front_image_urls.append(image_url)
             if item_product_title:
                 product_title = item_product_title
 
@@ -3065,11 +3503,20 @@ def extract_postcard_details(payload):
             if item_product_title:
                 product_title = item_product_title
 
+        if item_values["postcard_background_image"] and not postcard_background_image:
+            postcard_background_image = item_values["postcard_background_image"]
+
+        if item_values["rendered_back_image_url"] and not rendered_back_image_url:
+            rendered_back_image_url = item_values["rendered_back_image_url"]
+
         if item_values["from_name"] and not from_name:
             from_name = item_values["from_name"]
 
         if item_values["to_name"] and not to_name:
             to_name = item_values["to_name"]
+
+        if item_values["postcard_template"] and not postcard_template:
+            postcard_template = item_values["postcard_template"]
 
         if item_values["postcard_layout_key"] and postcard_layout_key == "single":
             postcard_layout_key = item_values["postcard_layout_key"]
@@ -3083,20 +3530,28 @@ def extract_postcard_details(payload):
             postcard_font_key = item_values["postcard_font_key"]
             postcard_font = item_values["postcard_font"]
 
-    if not message or not from_name or not to_name or not front_image_url or not back_image_url or not front_image_urls:
+    if not message or not from_name or not to_name or not front_image_url or not back_image_url or not front_image_urls or not postcard_background_image or not rendered_back_image_url:
         deep_values = pick_property_values(iter_named_values_deep(payload))
         if deep_values["message"] and not message:
             message = deep_values["message"]
         if deep_values["front_image_url"] and not front_image_url:
             front_image_url = deep_values["front_image_url"]
-        if deep_values["front_image_urls"] and not front_image_urls:
-            front_image_urls = list(deep_values["front_image_urls"])
+        if deep_values["front_image_urls"]:
+            for image_url in deep_values["front_image_urls"]:
+                if image_url and image_url not in front_image_urls:
+                    front_image_urls.append(image_url)
         if deep_values["back_image_url"] and not back_image_url:
             back_image_url = deep_values["back_image_url"]
+        if deep_values["postcard_background_image"] and not postcard_background_image:
+            postcard_background_image = deep_values["postcard_background_image"]
+        if deep_values["rendered_back_image_url"] and not rendered_back_image_url:
+            rendered_back_image_url = deep_values["rendered_back_image_url"]
         if deep_values["from_name"] and not from_name:
             from_name = deep_values["from_name"]
         if deep_values["to_name"] and not to_name:
             to_name = deep_values["to_name"]
+        if deep_values["postcard_template"] and not postcard_template:
+            postcard_template = deep_values["postcard_template"]
         if deep_values["postcard_layout_key"] and postcard_layout_key == "single":
             postcard_layout_key = deep_values["postcard_layout_key"]
             postcard_layout = deep_values["postcard_layout"]
@@ -3121,14 +3576,17 @@ def extract_postcard_details(payload):
         "from_name": from_name,
         "to_name": to_name,
         "front_image_url": front_image_url,
-        "front_image_urls": front_image_urls[:5],
+        "front_image_urls": front_image_urls[:6],
         "back_image_url": back_image_url,
+        "postcard_background_image": postcard_background_image,
+        "rendered_back_image_url": rendered_back_image_url,
         "postcard_layout": postcard_layout,
         "postcard_layout_key": postcard_layout_key,
         "postcard_frame": postcard_frame,
         "postcard_frame_key": postcard_frame_key,
         "postcard_font": postcard_font,
         "postcard_font_key": postcard_font_key,
+        "postcard_template": postcard_template,
     }
 
 
@@ -3209,12 +3667,15 @@ def insert_postcard(details, assets):
                     front_image_url = ?,
                     back_image_url = ?,
                     front_image_urls = ?,
+                    postcard_background_image = ?,
                     postcard_layout = ?,
                     postcard_layout_key = ?,
                     postcard_frame = ?,
                     postcard_frame_key = ?,
                     postcard_font = ?,
-                    postcard_font_key = ?
+                    postcard_font_key = ?,
+                    postcard_template = ?,
+                    rendered_back_image_url = ?
                 WHERE id = ?
                 """,
                 (
@@ -3228,12 +3689,15 @@ def insert_postcard(details, assets):
                     assets["front"],
                     assets["back"],
                     json.dumps(details.get("front_image_urls", []), ensure_ascii=False),
+                    details.get("postcard_background_image", ""),
                     details["postcard_layout"],
                     details["postcard_layout_key"],
                     details["postcard_frame"],
                     details["postcard_frame_key"],
                     details["postcard_font"],
                     details["postcard_font_key"],
+                    details.get("postcard_template", ""),
+                    details.get("rendered_back_image_url", ""),
                     existing["id"],
                 ),
             )
@@ -3254,15 +3718,18 @@ def insert_postcard(details, assets):
             front_image_url,
             back_image_url,
             front_image_urls,
+            postcard_background_image,
             postcard_layout,
             postcard_layout_key,
             postcard_frame,
             postcard_frame_key,
             postcard_font,
             postcard_font_key,
+            postcard_template,
+            rendered_back_image_url,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             details["order_id"],
@@ -3275,12 +3742,15 @@ def insert_postcard(details, assets):
             assets["front"],
             assets["back"],
             json.dumps(details.get("front_image_urls", []), ensure_ascii=False),
+            details.get("postcard_background_image", ""),
             details["postcard_layout"],
             details["postcard_layout_key"],
             details["postcard_frame"],
             details["postcard_frame_key"],
             details["postcard_font"],
             details["postcard_font_key"],
+            details.get("postcard_template", ""),
+            details.get("rendered_back_image_url", ""),
             utc_now_iso(),
         ),
     )
@@ -3515,18 +3985,24 @@ def view_postcard(slug):
     postcard_layout_key = normalize_postcard_layout_key(
         postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
     )
+    if postcard_layout_key == "single" and len(front_images) > 1:
+        postcard_layout_key = infer_layout_key_from_image_count(len(front_images))
     postcard_frame_key = normalize_postcard_frame_key(
         postcard_data.get("postcard_frame_key", "") or postcard_data.get("postcard_frame", "")
     )
     postcard_font_key = normalize_postcard_font_key(
         postcard_data.get("postcard_font_key", "") or postcard_data.get("postcard_font", "")
     )
-    message_style = resolve_message_style(postcard_font_key)
+    message_style = resolve_message_style(postcard_font_key, resolve_message_side(postcard_data))
     layout_preset = POSTCARD_LAYOUT_PRESETS[postcard_layout_key]
     frame_preset = POSTCARD_FRAME_PRESETS[postcard_frame_key]
+    rendered_back_image_url = str(postcard_data.get("rendered_back_image_url", "") or "").strip()
 
     if front_images:
         postcard_data["front_image_url"] = front_images[0]
+
+    if rendered_back_image_url:
+        postcard_data["back_image_url"] = rendered_back_image_url
 
     postcard_data["front_image_urls"] = json.dumps(front_images, ensure_ascii=False)
     postcard_data["postcard_layout"] = postcard_data.get("postcard_layout") or layout_preset["label"]
@@ -3549,10 +4025,11 @@ def view_postcard(slug):
         VIEW_HTML,
         postcard=postcard_data,
         front_slots=front_slots,
-        postcard_layout_class=f"is-{postcard_layout_key}",
+        postcard_layout_class=layout_preset.get("class_name", f"layout-{postcard_layout_key}"),
         postcard_frame_class=f"frame-{postcard_frame_key}",
         message_lines=message_lines,
         message_style=message_style,
+        hide_message_overlay=bool(rendered_back_image_url),
     )
 
 
