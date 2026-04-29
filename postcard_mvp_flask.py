@@ -3907,6 +3907,12 @@ def get_shipping_address(payload):
 def build_print_one_payload(details, payload, postcard_url):
     front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url") or "").strip()
     back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
+    front_variable_name = os.getenv("PRINT_ONE_FRONT_VARIABLE", "front_image").strip() or "front_image"
+    back_variable_name = os.getenv("PRINT_ONE_BACK_VARIABLE", "back_image").strip() or "back_image"
+    variables = {
+        front_variable_name: front_image_url,
+        back_variable_name: back_image_url,
+    }
 
     return {
         "order_reference": details.get("order_name") or details.get("order_id"),
@@ -3916,6 +3922,8 @@ def build_print_one_payload(details, payload, postcard_url):
         "delivery_type": details.get("postcard_delivery_type", ""),
         "fulfilment_route": details.get("fulfilment_route", ""),
         "recipient": get_shipping_address(payload),
+        "variables": variables,
+        "images": variables,
         "artwork": {
             "front_image_url": front_image_url,
             "back_image_url": back_image_url,
@@ -3960,6 +3968,21 @@ def should_send_to_print_one(details, source_topic):
 def submit_print_one_order(details, payload, postcard_url):
     should_send, reason = should_send_to_print_one(details, request.headers.get("X-Shopify-Topic", ""))
     if not should_send:
+        print(
+            "Print.one skipped:",
+            json.dumps(
+                {
+                    "reason": reason,
+                    "order_id": details.get("order_id", ""),
+                    "order_name": details.get("order_name", ""),
+                    "delivery_key": details.get("postcard_delivery_key", ""),
+                    "print_ready": details.get("print_ready", ""),
+                    "has_front": bool(str(details.get("print_front_image_url", "") or "").strip()),
+                    "has_back": bool(str(details.get("rendered_back_image_url", "") or "").strip()),
+                },
+                ensure_ascii=False,
+            ),
+        )
         return {"sent": False, "reason": reason}
 
     api_url = os.getenv("PRINT_ONE_API_URL", "").strip()
@@ -3976,6 +3999,18 @@ def submit_print_one_order(details, payload, postcard_url):
     req = urllib.request.Request(api_url, data=request_body, headers=headers, method="POST")
 
     try:
+        print(
+            "Print.one submit:",
+            json.dumps(
+                {
+                    "order_id": details.get("order_id", ""),
+                    "order_name": details.get("order_name", ""),
+                    "template_id": payload_data.get("template_id", ""),
+                    "variables": list((payload_data.get("variables") or {}).keys()),
+                },
+                ensure_ascii=False,
+            ),
+        )
         with urllib.request.urlopen(req, timeout=20) as response:
             response_text = response.read().decode("utf-8", errors="replace")
             return {
