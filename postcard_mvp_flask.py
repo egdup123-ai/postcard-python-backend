@@ -3,6 +3,8 @@ import json
 import os
 import secrets
 import sqlite3
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from textwrap import wrap
 import re
@@ -2842,6 +2844,16 @@ def ensure_db():
         conn.execute("ALTER TABLE postcards ADD COLUMN postcard_template TEXT NOT NULL DEFAULT ''")
     if "rendered_back_image_url" not in existing_columns:
         conn.execute("ALTER TABLE postcards ADD COLUMN rendered_back_image_url TEXT NOT NULL DEFAULT ''")
+    if "print_front_image_url" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN print_front_image_url TEXT NOT NULL DEFAULT ''")
+    if "print_ready" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN print_ready TEXT NOT NULL DEFAULT ''")
+    if "print_generated_at" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN print_generated_at TEXT NOT NULL DEFAULT ''")
+    if "print_one_status" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN print_one_status TEXT NOT NULL DEFAULT ''")
+    if "print_one_response" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN print_one_response TEXT NOT NULL DEFAULT ''")
 
     conn.execute(
         """
@@ -3012,6 +3024,40 @@ RENDERED_BACK_IMAGE_PROPERTY_NAMES = {
     "postcard final back image",
     "final back image",
     "back image with text",
+}
+
+PRINT_FRONT_IMAGE_PROPERTY_NAMES = {
+    "print front image url",
+    "print front image",
+    "postcard rendered front image",
+    "rendered front image",
+    "postcard final front image",
+    "final front image",
+}
+
+PRINT_READY_PROPERTY_NAMES = {
+    "print ready",
+    "postcard print ready",
+}
+
+PRINT_GENERATED_AT_PROPERTY_NAMES = {
+    "print generated at",
+    "postcard print generated at",
+}
+
+DELIVERY_TYPE_PROPERTY_NAMES = {
+    "postcard delivery type",
+    "delivery type",
+}
+
+DELIVERY_KEY_PROPERTY_NAMES = {
+    "postcard delivery key",
+    "delivery key",
+}
+
+FULFILMENT_ROUTE_PROPERTY_NAMES = {
+    "fulfilment route",
+    "fulfillment route",
 }
 
 FROM_PROPERTY_NAMES = {
@@ -3189,6 +3235,12 @@ def pick_property_values(named_values):
     back_image_url = ""
     postcard_background_image = ""
     rendered_back_image_url = ""
+    print_front_image_url = ""
+    print_ready = ""
+    print_generated_at = ""
+    postcard_delivery_type = ""
+    postcard_delivery_key = ""
+    fulfilment_route = ""
     front_image_urls = []
     numbered_front_images = {}
     postcard_layout = ""
@@ -3217,6 +3269,18 @@ def pick_property_values(named_values):
             postcard_background_image = prop_value
         elif normalized_prop_name in RENDERED_BACK_IMAGE_PROPERTY_NAMES and prop_value and not rendered_back_image_url:
             rendered_back_image_url = prop_value
+        elif normalized_prop_name in PRINT_FRONT_IMAGE_PROPERTY_NAMES and prop_value and not print_front_image_url:
+            print_front_image_url = prop_value
+        elif normalized_prop_name in PRINT_READY_PROPERTY_NAMES and prop_value and not print_ready:
+            print_ready = prop_value
+        elif normalized_prop_name in PRINT_GENERATED_AT_PROPERTY_NAMES and prop_value and not print_generated_at:
+            print_generated_at = prop_value
+        elif normalized_prop_name in DELIVERY_TYPE_PROPERTY_NAMES and prop_value and not postcard_delivery_type:
+            postcard_delivery_type = prop_value
+        elif normalized_prop_name in DELIVERY_KEY_PROPERTY_NAMES and prop_value and not postcard_delivery_key:
+            postcard_delivery_key = prop_value
+        elif normalized_prop_name in FULFILMENT_ROUTE_PROPERTY_NAMES and prop_value and not fulfilment_route:
+            fulfilment_route = prop_value
         elif normalized_prop_name in FROM_PROPERTY_NAMES and prop_value and not from_name:
             from_name = prop_value
         elif normalized_prop_name in TO_PROPERTY_NAMES and prop_value and not to_name:
@@ -3262,6 +3326,12 @@ def pick_property_values(named_values):
         "back_image_url": back_image_url,
         "postcard_background_image": postcard_background_image,
         "rendered_back_image_url": rendered_back_image_url,
+        "print_front_image_url": print_front_image_url,
+        "print_ready": print_ready,
+        "print_generated_at": print_generated_at,
+        "postcard_delivery_type": postcard_delivery_type,
+        "postcard_delivery_key": postcard_delivery_key,
+        "fulfilment_route": fulfilment_route,
         "postcard_layout": postcard_layout or POSTCARD_LAYOUT_PRESETS[normalized_layout_key]["label"],
         "postcard_layout_key": normalized_layout_key,
         "postcard_frame": postcard_frame or POSTCARD_FRAME_PRESETS[normalized_frame_key]["label"],
@@ -3467,6 +3537,12 @@ def extract_postcard_details(payload):
     back_image_url = order_level_values["back_image_url"]
     postcard_background_image = order_level_values["postcard_background_image"]
     rendered_back_image_url = order_level_values["rendered_back_image_url"]
+    print_front_image_url = order_level_values["print_front_image_url"]
+    print_ready = order_level_values["print_ready"]
+    print_generated_at = order_level_values["print_generated_at"]
+    postcard_delivery_type = order_level_values["postcard_delivery_type"]
+    postcard_delivery_key = order_level_values["postcard_delivery_key"]
+    fulfilment_route = order_level_values["fulfilment_route"]
     postcard_layout = order_level_values["postcard_layout"]
     postcard_layout_key = order_level_values["postcard_layout_key"]
     postcard_frame = order_level_values["postcard_frame"]
@@ -3510,6 +3586,18 @@ def extract_postcard_details(payload):
 
         if item_values["rendered_back_image_url"] and not rendered_back_image_url:
             rendered_back_image_url = item_values["rendered_back_image_url"]
+        if item_values["print_front_image_url"] and not print_front_image_url:
+            print_front_image_url = item_values["print_front_image_url"]
+        if item_values["print_ready"] and not print_ready:
+            print_ready = item_values["print_ready"]
+        if item_values["print_generated_at"] and not print_generated_at:
+            print_generated_at = item_values["print_generated_at"]
+        if item_values["postcard_delivery_type"] and not postcard_delivery_type:
+            postcard_delivery_type = item_values["postcard_delivery_type"]
+        if item_values["postcard_delivery_key"] and not postcard_delivery_key:
+            postcard_delivery_key = item_values["postcard_delivery_key"]
+        if item_values["fulfilment_route"] and not fulfilment_route:
+            fulfilment_route = item_values["fulfilment_route"]
 
         if item_values["from_name"] and not from_name:
             from_name = item_values["from_name"]
@@ -3548,6 +3636,18 @@ def extract_postcard_details(payload):
             postcard_background_image = deep_values["postcard_background_image"]
         if deep_values["rendered_back_image_url"] and not rendered_back_image_url:
             rendered_back_image_url = deep_values["rendered_back_image_url"]
+        if deep_values["print_front_image_url"] and not print_front_image_url:
+            print_front_image_url = deep_values["print_front_image_url"]
+        if deep_values["print_ready"] and not print_ready:
+            print_ready = deep_values["print_ready"]
+        if deep_values["print_generated_at"] and not print_generated_at:
+            print_generated_at = deep_values["print_generated_at"]
+        if deep_values["postcard_delivery_type"] and not postcard_delivery_type:
+            postcard_delivery_type = deep_values["postcard_delivery_type"]
+        if deep_values["postcard_delivery_key"] and not postcard_delivery_key:
+            postcard_delivery_key = deep_values["postcard_delivery_key"]
+        if deep_values["fulfilment_route"] and not fulfilment_route:
+            fulfilment_route = deep_values["fulfilment_route"]
         if deep_values["from_name"] and not from_name:
             from_name = deep_values["from_name"]
         if deep_values["to_name"] and not to_name:
@@ -3582,6 +3682,12 @@ def extract_postcard_details(payload):
         "back_image_url": back_image_url,
         "postcard_background_image": postcard_background_image,
         "rendered_back_image_url": rendered_back_image_url,
+        "print_front_image_url": print_front_image_url,
+        "print_ready": print_ready,
+        "print_generated_at": print_generated_at,
+        "postcard_delivery_type": postcard_delivery_type,
+        "postcard_delivery_key": postcard_delivery_key,
+        "fulfilment_route": fulfilment_route,
         "postcard_layout": postcard_layout,
         "postcard_layout_key": postcard_layout_key,
         "postcard_frame": postcard_frame,
@@ -3677,7 +3783,10 @@ def insert_postcard(details, assets):
                     postcard_font = ?,
                     postcard_font_key = ?,
                     postcard_template = ?,
-                    rendered_back_image_url = ?
+                    rendered_back_image_url = ?,
+                    print_front_image_url = ?,
+                    print_ready = ?,
+                    print_generated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -3700,6 +3809,9 @@ def insert_postcard(details, assets):
                     details["postcard_font_key"],
                     details.get("postcard_template", ""),
                     details.get("rendered_back_image_url", ""),
+                    details.get("print_front_image_url", ""),
+                    details.get("print_ready", ""),
+                    details.get("print_generated_at", ""),
                     existing["id"],
                 ),
             )
@@ -3729,9 +3841,12 @@ def insert_postcard(details, assets):
             postcard_font_key,
             postcard_template,
             rendered_back_image_url,
+            print_front_image_url,
+            print_ready,
+            print_generated_at,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             details["order_id"],
@@ -3753,6 +3868,9 @@ def insert_postcard(details, assets):
             details["postcard_font_key"],
             details.get("postcard_template", ""),
             details.get("rendered_back_image_url", ""),
+            details.get("print_front_image_url", ""),
+            details.get("print_ready", ""),
+            details.get("print_generated_at", ""),
             utc_now_iso(),
         ),
     )
@@ -3761,6 +3879,153 @@ def insert_postcard(details, assets):
 
 
 ensure_db()
+
+
+def truthy(value) -> bool:
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "ready"}
+
+
+def get_shipping_address(payload):
+    shipping = payload.get("shipping_address") or payload.get("shippingAddress") or {}
+    if not isinstance(shipping, dict):
+        return {}
+
+    return {
+        "first_name": shipping.get("first_name") or shipping.get("firstName") or "",
+        "last_name": shipping.get("last_name") or shipping.get("lastName") or "",
+        "company": shipping.get("company") or "",
+        "address1": shipping.get("address1") or "",
+        "address2": shipping.get("address2") or "",
+        "city": shipping.get("city") or "",
+        "province": shipping.get("province") or shipping.get("province_code") or shipping.get("provinceCode") or "",
+        "zip": shipping.get("zip") or shipping.get("postal_code") or shipping.get("postalCode") or "",
+        "country": shipping.get("country") or shipping.get("country_code") or shipping.get("countryCode") or "",
+        "phone": shipping.get("phone") or "",
+    }
+
+
+def build_print_one_payload(details, payload, postcard_url):
+    front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url") or "").strip()
+    back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
+
+    return {
+        "order_reference": details.get("order_name") or details.get("order_id"),
+        "shopify_order_id": details.get("order_id", ""),
+        "shopify_order_name": details.get("order_name", ""),
+        "delivery_key": details.get("postcard_delivery_key", ""),
+        "delivery_type": details.get("postcard_delivery_type", ""),
+        "fulfilment_route": details.get("fulfilment_route", ""),
+        "recipient": get_shipping_address(payload),
+        "artwork": {
+            "front_image_url": front_image_url,
+            "back_image_url": back_image_url,
+            "postcard_url": postcard_url,
+        },
+        "template_id": os.getenv("PRINT_ONE_TEMPLATE_ID", ""),
+        "metadata": {
+            "source": "send-a-memory",
+            "print_ready": details.get("print_ready", ""),
+            "print_generated_at": details.get("print_generated_at", ""),
+        },
+    }
+
+
+def should_send_to_print_one(details, source_topic):
+    if not truthy(os.getenv("PRINT_ONE_ENABLED", "")):
+        return False, "disabled"
+
+    if "paid" not in str(source_topic or "").casefold() and not truthy(os.getenv("PRINT_ONE_SEND_ON_NON_PAID", "")):
+        return False, "waiting_for_paid_webhook"
+
+    delivery_key = str(details.get("postcard_delivery_key", "") or "").casefold()
+    fulfilment_route = str(details.get("fulfilment_route", "") or "").casefold()
+    if delivery_key == "digital" or "link only" in fulfilment_route:
+        return False, "digital_only"
+
+    if not truthy(details.get("print_ready", "")):
+        return False, "print_not_ready"
+
+    if not str(details.get("print_front_image_url", "") or "").strip():
+        return False, "missing_print_front_image_url"
+
+    if not str(details.get("rendered_back_image_url", "") or "").strip():
+        return False, "missing_print_back_image_url"
+
+    if not os.getenv("PRINT_ONE_API_URL", "").strip() or not os.getenv("PRINT_ONE_API_KEY", "").strip():
+        return False, "missing_print_one_config"
+
+    return True, "ready"
+
+
+def submit_print_one_order(details, payload, postcard_url):
+    should_send, reason = should_send_to_print_one(details, request.headers.get("X-Shopify-Topic", ""))
+    if not should_send:
+        return {"sent": False, "reason": reason}
+
+    api_url = os.getenv("PRINT_ONE_API_URL", "").strip()
+    api_key = os.getenv("PRINT_ONE_API_KEY", "").strip()
+    payload_data = build_print_one_payload(details, payload, postcard_url)
+    request_body = json.dumps(payload_data).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "Idempotency-Key": f"sendamemory-{details.get('order_id', '')}",
+    }
+
+    req = urllib.request.Request(api_url, data=request_body, headers=headers, method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            response_text = response.read().decode("utf-8", errors="replace")
+            return {
+                "sent": True,
+                "status_code": response.status,
+                "response": response_text[:4000],
+            }
+    except urllib.error.HTTPError as error:
+        response_text = error.read().decode("utf-8", errors="replace")
+        return {
+            "sent": False,
+            "reason": "print_one_http_error",
+            "status_code": error.code,
+            "response": response_text[:4000],
+        }
+    except Exception as error:
+        return {
+            "sent": False,
+            "reason": "print_one_request_failed",
+            "response": str(error),
+        }
+
+
+def update_print_one_status(order_id, result):
+    order_id_candidates = build_order_id_candidates(order_id)
+    if not order_id_candidates:
+        return
+
+    db = get_db()
+    placeholders = ", ".join("?" for _ in order_id_candidates)
+    db.execute(
+        f"""
+        UPDATE postcards
+        SET print_one_status = ?,
+            print_one_response = ?
+        WHERE id = (
+            SELECT id
+            FROM postcards
+            WHERE order_id IN ({placeholders})
+            ORDER BY id DESC
+            LIMIT 1
+        )
+        """,
+        [
+            "sent" if result.get("sent") else str(result.get("reason", "not_sent")),
+            json.dumps(result, ensure_ascii=False)[:4000],
+            *order_id_candidates,
+        ],
+    )
+    db.commit()
 
 
 def log_webhook_debug_event(topic, payload, details):
@@ -3862,6 +4127,8 @@ def process_shopify_order_webhook():
 
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
+    print_one_result = submit_print_one_order(details, payload, postcard_url)
+    update_print_one_status(details["order_id"], print_one_result)
 
     return jsonify({
         "ok": True,
@@ -3869,6 +4136,7 @@ def process_shopify_order_webhook():
         "url": postcard_url,
         "topic": source_topic,
         "order_id": details["order_id"],
+        "print_one": print_one_result,
     }), 200
 
 
@@ -3984,9 +4252,14 @@ def view_postcard(slug):
         postcard_data.get("front_image_urls", ""),
         postcard_data.get("front_image_url", ""),
     )
+    print_front_image_url = str(postcard_data.get("print_front_image_url", "") or "").strip()
+    if print_front_image_url:
+        front_images = [print_front_image_url]
     postcard_layout_key = normalize_postcard_layout_key(
         postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
     )
+    if print_front_image_url:
+        postcard_layout_key = "single-full"
     if postcard_layout_key == "single" and len(front_images) > 1:
         postcard_layout_key = infer_layout_key_from_image_count(len(front_images))
     postcard_frame_key = normalize_postcard_frame_key(
