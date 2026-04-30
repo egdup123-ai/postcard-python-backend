@@ -4189,6 +4189,13 @@ def process_shopify_order_webhook():
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
     prodigi_result = submit_prodigi_order(details, payload, postcard_url)
+   
+    print(
+    "Prodigi result:",
+    json.dumps(prodigi_result, ensure_ascii=False),
+    flush=True,
+    )
+
     update_prodigi_status(details["order_id"], prodigi_result)
 
     return jsonify({
