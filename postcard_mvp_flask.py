@@ -2850,10 +2850,10 @@ def ensure_db():
         conn.execute("ALTER TABLE postcards ADD COLUMN print_ready TEXT NOT NULL DEFAULT ''")
     if "print_generated_at" not in existing_columns:
         conn.execute("ALTER TABLE postcards ADD COLUMN print_generated_at TEXT NOT NULL DEFAULT ''")
-    if "print_one_status" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN print_one_status TEXT NOT NULL DEFAULT ''")
-    if "print_one_response" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN print_one_response TEXT NOT NULL DEFAULT ''")
+    if "prodigi_status" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN prodigi_status TEXT NOT NULL DEFAULT ''")
+    if "prodigi_response" not in existing_columns:
+        conn.execute("ALTER TABLE postcards ADD COLUMN prodigi_response TEXT NOT NULL DEFAULT ''")
 
     conn.execute(
         """
@@ -3904,45 +3904,68 @@ def get_shipping_address(payload):
     }
 
 
-def build_print_one_payload(details, payload, postcard_url):
+def build_prodigi_payload(details, payload, postcard_url):
     front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url") or "").strip()
     back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
-    front_variable_name = os.getenv("PRINT_ONE_FRONT_VARIABLE", "front_image").strip() or "front_image"
-    back_variable_name = os.getenv("PRINT_ONE_BACK_VARIABLE", "back_image").strip() or "back_image"
-    variables = {
-        front_variable_name: front_image_url,
-        back_variable_name: back_image_url,
+    shipping = get_shipping_address(payload)
+    recipient_name = " ".join(
+        part for part in [shipping.get("first_name", ""), shipping.get("last_name", "")] if part
+    ).strip() or details.get("to_name") or "Postcard recipient"
+    country_code = shipping.get("country", "")
+    if len(country_code) != 2:
+        country_code = payload.get("shipping_address", {}).get("country_code", "") or country_code
+
+    front_print_area = os.getenv("PRODIGI_FRONT_PRINT_AREA", "front").strip() or "front"
+    back_print_area = os.getenv("PRODIGI_BACK_PRINT_AREA", "back").strip() or "back"
+    assets = [
+        {"printArea": front_print_area, "url": front_image_url},
+        {"printArea": back_print_area, "url": back_image_url},
+    ]
+
+    metadata = {
+        "source": "send-a-memory",
+        "shopify_order_id": details.get("order_id", ""),
+        "shopify_order_name": details.get("order_name", ""),
+        "postcard_url": postcard_url,
+        "print_ready": details.get("print_ready", ""),
+        "print_generated_at": details.get("print_generated_at", ""),
     }
 
     return {
-        "order_reference": details.get("order_name") or details.get("order_id"),
-        "shopify_order_id": details.get("order_id", ""),
-        "shopify_order_name": details.get("order_name", ""),
-        "delivery_key": details.get("postcard_delivery_key", ""),
-        "delivery_type": details.get("postcard_delivery_type", ""),
-        "fulfilment_route": details.get("fulfilment_route", ""),
-        "recipient": get_shipping_address(payload),
-        "variables": variables,
-        "images": variables,
-        "artwork": {
-            "front_image_url": front_image_url,
-            "back_image_url": back_image_url,
-            "postcard_url": postcard_url,
+        "merchantReference": details.get("order_name") or details.get("order_id"),
+        "shippingMethod": os.getenv("PRODIGI_SHIPPING_METHOD", "Standard").strip() or "Standard",
+        "recipient": {
+            "name": recipient_name,
+            "email": payload.get("email") or payload.get("contact_email") or None,
+            "phoneNumber": shipping.get("phone") or None,
+            "address": {
+                "line1": shipping.get("address1", ""),
+                "line2": shipping.get("address2", "") or None,
+                "postalOrZipCode": shipping.get("zip", ""),
+                "countryCode": country_code,
+                "townOrCity": shipping.get("city", ""),
+                "stateOrCounty": shipping.get("province", "") or None,
+            },
         },
-        "template_id": os.getenv("PRINT_ONE_TEMPLATE_ID", ""),
-        "metadata": {
-            "source": "send-a-memory",
-            "print_ready": details.get("print_ready", ""),
-            "print_generated_at": details.get("print_generated_at", ""),
-        },
+        "items": [
+            {
+                "merchantReference": f"{details.get('order_name') or details.get('order_id')}-postcard",
+                "sku": os.getenv("PRODIGI_POSTCARD_SKU", "").strip(),
+                "copies": int(os.getenv("PRODIGI_COPIES", "1") or "1"),
+                "sizing": os.getenv("PRODIGI_SIZING", "fillPrintArea").strip() or "fillPrintArea",
+                "assets": assets,
+            }
+        ],
+        "metadata": metadata,
+        "idempotencyKey": f"sendamemory-{details.get('order_id', '')}",
     }
 
 
-def should_send_to_print_one(details, source_topic):
-    if not truthy(os.getenv("PRINT_ONE_ENABLED", "")):
+def should_send_to_prodigi(details, source_topic):
+    if not truthy(os.getenv("PRODIGI_ENABLED", "")):
         return False, "disabled"
 
-    if "paid" not in str(source_topic or "").casefold() and not truthy(os.getenv("PRINT_ONE_SEND_ON_NON_PAID", "")):
+    if "paid" not in str(source_topic or "").casefold() and not truthy(os.getenv("PRODIGI_SEND_ON_NON_PAID", "")):
         return False, "waiting_for_paid_webhook"
 
     delivery_key = str(details.get("postcard_delivery_key", "") or "").casefold()
@@ -3959,17 +3982,17 @@ def should_send_to_print_one(details, source_topic):
     if not str(details.get("rendered_back_image_url", "") or "").strip():
         return False, "missing_print_back_image_url"
 
-    if not os.getenv("PRINT_ONE_API_URL", "").strip() or not os.getenv("PRINT_ONE_API_KEY", "").strip():
-        return False, "missing_print_one_config"
+    if not os.getenv("PRODIGI_API_KEY", "").strip() or not os.getenv("PRODIGI_POSTCARD_SKU", "").strip():
+        return False, "missing_prodigi_config"
 
     return True, "ready"
 
 
-def submit_print_one_order(details, payload, postcard_url):
-    should_send, reason = should_send_to_print_one(details, request.headers.get("X-Shopify-Topic", ""))
+def submit_prodigi_order(details, payload, postcard_url):
+    should_send, reason = should_send_to_prodigi(details, request.headers.get("X-Shopify-Topic", ""))
     if not should_send:
         print(
-            "Print.one skipped:",
+            "Prodigi skipped:",
             json.dumps(
                 {
                     "reason": reason,
@@ -3985,28 +4008,31 @@ def submit_print_one_order(details, payload, postcard_url):
         )
         return {"sent": False, "reason": reason}
 
-    api_url = os.getenv("PRINT_ONE_API_URL", "").strip()
-    api_key = os.getenv("PRINT_ONE_API_KEY", "").strip()
-    payload_data = build_print_one_payload(details, payload, postcard_url)
+    api_base = os.getenv("PRODIGI_API_BASE", "https://api.sandbox.prodigi.com").strip().rstrip("/")
+    api_url = f"{api_base}/v4.0/Orders"
+    api_key = os.getenv("PRODIGI_API_KEY", "").strip()
+    payload_data = build_prodigi_payload(details, payload, postcard_url)
     request_body = json.dumps(payload_data).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Authorization": f"Bearer {api_key}",
-        "Idempotency-Key": f"sendamemory-{details.get('order_id', '')}",
+        "X-API-Key": api_key,
     }
 
     req = urllib.request.Request(api_url, data=request_body, headers=headers, method="POST")
 
     try:
         print(
-            "Print.one submit:",
+            "Prodigi submit:",
             json.dumps(
                 {
                     "order_id": details.get("order_id", ""),
                     "order_name": details.get("order_name", ""),
-                    "template_id": payload_data.get("template_id", ""),
-                    "variables": list((payload_data.get("variables") or {}).keys()),
+                    "sku": (payload_data.get("items") or [{}])[0].get("sku", ""),
+                    "asset_print_areas": [
+                        asset.get("printArea", "")
+                        for asset in (payload_data.get("items") or [{}])[0].get("assets", [])
+                    ],
                 },
                 ensure_ascii=False,
             ),
@@ -4022,19 +4048,19 @@ def submit_print_one_order(details, payload, postcard_url):
         response_text = error.read().decode("utf-8", errors="replace")
         return {
             "sent": False,
-            "reason": "print_one_http_error",
+            "reason": "prodigi_http_error",
             "status_code": error.code,
             "response": response_text[:4000],
         }
     except Exception as error:
         return {
             "sent": False,
-            "reason": "print_one_request_failed",
+            "reason": "prodigi_request_failed",
             "response": str(error),
         }
 
 
-def update_print_one_status(order_id, result):
+def update_prodigi_status(order_id, result):
     order_id_candidates = build_order_id_candidates(order_id)
     if not order_id_candidates:
         return
@@ -4044,8 +4070,8 @@ def update_print_one_status(order_id, result):
     db.execute(
         f"""
         UPDATE postcards
-        SET print_one_status = ?,
-            print_one_response = ?
+        SET prodigi_status = ?,
+            prodigi_response = ?
         WHERE id = (
             SELECT id
             FROM postcards
@@ -4162,8 +4188,8 @@ def process_shopify_order_webhook():
 
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
-    print_one_result = submit_print_one_order(details, payload, postcard_url)
-    update_print_one_status(details["order_id"], print_one_result)
+    prodigi_result = submit_prodigi_order(details, payload, postcard_url)
+    update_prodigi_status(details["order_id"], prodigi_result)
 
     return jsonify({
         "ok": True,
@@ -4171,7 +4197,7 @@ def process_shopify_order_webhook():
         "url": postcard_url,
         "topic": source_topic,
         "order_id": details["order_id"],
-        "print_one": print_one_result,
+        "prodigi": prodigi_result,
     }), 200
 
 
