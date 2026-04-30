@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from textwrap import wrap
 import re
 import unicodedata
+import io
+import requests
+from PIL import Image
 
 app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
@@ -3903,23 +3906,85 @@ def get_shipping_address(payload):
         "phone": shipping.get("phone") or "",
     }
 
+def create_prodigi_postcard_pdf(front_url, back_url):
+    if not front_url or not back_url:
+        raise ValueError("Missing front or back image URL for Prodigi print file.")
 
+    cloudinary_endpoint = os.getenv("CLOUDINARY_UPLOAD_ENDPOINT", "").strip()
+    cloudinary_preset = os.getenv("CLOUDINARY_UPLOAD_PRESET", "").strip()
+
+    if not cloudinary_endpoint:
+        cloudinary_endpoint = "https://api.cloudinary.com/v1_1/dcjku2arh/raw/upload"
+
+    if not cloudinary_preset:
+        cloudinary_preset = "shopify_postcard_upload"
+
+    def load_image(url):
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        return Image.open(io.BytesIO(response.content)).convert("RGB")
+
+    front = load_image(front_url)
+    back = load_image(back_url)
+
+    target_size = (1800, 1200)
+
+    front = front.resize(target_size, Image.LANCZOS)
+    back = back.resize(target_size, Image.LANCZOS)
+
+    pdf_buffer = io.BytesIO()
+    front.save(
+        pdf_buffer,
+        format="PDF",
+        resolution=300.0,
+        save_all=True,
+        append_images=[back],
+    )
+    pdf_buffer.seek(0)
+
+    files = {
+        "file": ("prodigi-postcard.pdf", pdf_buffer, "application/pdf")
+    }
+
+    data = {
+        "upload_preset": cloudinary_preset,
+        "folder": "postcards/prodigi-print-files",
+    }
+
+    upload_response = requests.post(
+        cloudinary_endpoint,
+        files=files,
+        data=data,
+        timeout=60,
+    )
+    upload_response.raise_for_status()
+
+    upload_data = upload_response.json()
+    combined_url = upload_data.get("secure_url") or upload_data.get("url")
+
+    if not combined_url:
+        raise ValueError("Cloudinary did not return a combined Prodigi PDF URL.")
+
+    return combined_url
 def build_prodigi_payload(details, payload, postcard_url):
     front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url") or "").strip()
     back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
+    combined_print_url = create_prodigi_postcard_pdf(front_image_url, back_image_url)
     shipping = get_shipping_address(payload)
+
     recipient_name = " ".join(
         part for part in [shipping.get("first_name", ""), shipping.get("last_name", "")] if part
     ).strip() or details.get("to_name") or "Postcard recipient"
+
     country_code = shipping.get("country", "")
     if len(country_code) != 2:
         country_code = payload.get("shipping_address", {}).get("country_code", "") or country_code
 
-    front_print_area = os.getenv("PRODIGI_FRONT_PRINT_AREA", "front").strip() or "front"
-    back_print_area = os.getenv("PRODIGI_BACK_PRINT_AREA", "back").strip() or "back"
-    assets = [
-        {"printArea": front_print_area, "url": front_image_url},
-        {"printArea": back_print_area, "url": back_image_url},
+        assets = [
+        {
+            "printArea": "default",
+            "url": combined_print_url,
+        }
     ]
 
     metadata = {
