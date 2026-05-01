@@ -3387,8 +3387,9 @@ def normalize_property_name(prop_name: str) -> str:
     if bracket_match:
         normalized = bracket_match.group(1)
 
-    return normalized.casefold().replace("_", " ").replace("-", " ").strip()
+    normalized = normalized.lstrip("_").strip()
 
+    return normalized.casefold().replace("_", " ").replace("-", " ").strip()
 
 def split_image_url_values(raw_value):
     raw_text = str(raw_value or "").strip()
