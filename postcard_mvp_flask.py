@@ -1427,10 +1427,13 @@ VIEW_HTML = r"""
 .postcard-front-slot::after {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: 5px;
   pointer-events: none;
   background: url("/static/ornate-slot-frame.svg") center / 100% 100% no-repeat;
   z-index: 4;
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  filter: brightness(1.35) saturate(1.25);
 }
 
 .postcard-front-art .postcard-front-slot-media {
