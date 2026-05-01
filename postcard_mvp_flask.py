@@ -1420,14 +1420,17 @@ VIEW_HTML = r"""
       object-fit: cover;
       display: block;
     }
-.postcard-front-art .postcard-front-slot {
-  padding: clamp(3px, 0.8vw, 8px);
-  background: linear-gradient(180deg, #fbf7ef 0%, #eee5d8 100%);
-  border: 1px solid rgba(140, 118, 88, 0.22);
-  border-radius: clamp(8px, 1.4vw, 14px);
-  box-shadow:
-    0 4px 12px rgba(60, 44, 24, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+.postcard-front-slot {
+  position: relative;
+}
+
+.postcard-front-slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: url("/static/ornate-slot-frame.svg") center / 100% 100% no-repeat;
+  z-index: 4;
 }
 
 .postcard-front-art .postcard-front-slot-media {
