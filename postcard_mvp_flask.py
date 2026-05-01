@@ -4380,24 +4380,25 @@ def view_postcard(slug):
     if not postcard:
         return "Razglednica nije pronadena.", 404
 
-    postcard_data = dict(postcard)
+        postcard_data = dict(postcard)
     front_images = load_front_image_urls(
         postcard_data.get("front_image_urls", ""),
         postcard_data.get("front_image_url", ""),
     )
+
     print_front_image_url = str(postcard_data.get("print_front_image_url", "") or "").strip()
-    if print_front_image_url:
-        front_images = [print_front_image_url]
+
     postcard_layout_key = normalize_postcard_layout_key(
         postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
     )
-    if print_front_image_url:
-        postcard_layout_key = "single-full"
+
     if postcard_layout_key == "single" and len(front_images) > 1:
         postcard_layout_key = infer_layout_key_from_image_count(len(front_images))
+
     postcard_frame_key = normalize_postcard_frame_key(
         postcard_data.get("postcard_frame_key", "") or postcard_data.get("postcard_frame", "")
     )
+
     postcard_font_key = normalize_postcard_font_key(
         postcard_data.get("postcard_font_key", "") or postcard_data.get("postcard_font", "")
     )
