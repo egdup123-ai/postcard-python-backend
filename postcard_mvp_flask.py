@@ -367,7 +367,7 @@ VIEW_HTML = r"""
       --bg-bottom: #e7ddd6;
       --ink: #2f2427;
       --muted: rgba(47, 36, 39, 0.58);
-      --card-radius: 30px;
+      --card-radius: 0px;
       --card-shadow: 0 38px 96px rgba(64, 94, 108, 0.16);
       --card-shadow-strong: 0 58px 140px rgba(44, 72, 89, 0.16);
       --glass: rgba(255, 255, 255, 0.7);
@@ -1440,7 +1440,7 @@ VIEW_HTML = r"""
   padding: 5px;
   background: #f8f2e7;
   border: 2px solid rgba(164, 128, 62, 0.72);
-  border-radius: 10px;
+  border-radius: 0px;
   box-shadow:
     0 2px 8px rgba(65, 45, 22, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -1448,13 +1448,13 @@ VIEW_HTML = r"""
 
 .postcard-front-art .postcard-front-slot-media {
   border: 1px solid rgba(92, 70, 38, 0.25);
-  border-radius: 7px;
+  border-radius: 0px;
   overflow: hidden;
   background: #fff;
 }
 
 .postcard-front-art .postcard-front-slot-media img {
-  border-radius: 5px;
+  border-radius: 0px;
 }
     .postcard-front-art.is-trio .slot-a {
       grid-column: 1;
