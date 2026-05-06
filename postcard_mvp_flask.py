@@ -1420,6 +1420,24 @@ VIEW_HTML = r"""
       object-fit: cover;
       display: block;
     }
+
+    .postcard-front-art--rendered {
+      display: block;
+      padding: 0;
+      gap: 0;
+      background: #fff;
+    }
+
+    .postcard-front-art--rendered::before {
+      display: none;
+    }
+
+    .postcard-front-rendered-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
 .postcard-front-slot {
   position: relative;
 }
@@ -2067,21 +2085,28 @@ VIEW_HTML = r"""
   {% set sender_name = postcard['from_name']|default('', true)|trim %}
   {% set recipient_name = postcard['to_name']|default('', true)|trim %}
   {% macro render_front_art(extra_class='') -%}
-    <div class="postcard-front-art {{ postcard_layout_class }} {{ postcard_frame_class }} {{ extra_class }}">
-      {% set front_background = postcard['postcard_background_image']|default('', true)|trim %}
-      {% if front_background %}
-        <img class="postcard-front-background" src="{{ front_background }}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer">
-      {% endif %}
-      {% for slot in front_slots %}
-        <div class="postcard-front-slot {{ slot.slot_class }}">
-          <div class="postcard-front-slot-media">
-            {% if slot.image_url %}
-              <img src="{{ slot.image_url }}" alt="Front image {{ loop.index }}" crossorigin="anonymous" referrerpolicy="no-referrer">
-            {% endif %}
+    {% set print_front = postcard['print_front_image_url']|default('', true)|trim %}
+    {% if print_front %}
+      <div class="postcard-front-art postcard-front-art--rendered {{ extra_class }}">
+        <img class="postcard-front-rendered-image" src="{{ print_front }}" alt="Postcard front" crossorigin="anonymous" referrerpolicy="no-referrer">
+      </div>
+    {% else %}
+      <div class="postcard-front-art {{ postcard_layout_class }} {{ postcard_frame_class }} {{ extra_class }}">
+        {% set front_background = postcard['postcard_background_image']|default('', true)|trim %}
+        {% if front_background %}
+          <img class="postcard-front-background" src="{{ front_background }}" alt="" crossorigin="anonymous" referrerpolicy="no-referrer">
+        {% endif %}
+        {% for slot in front_slots %}
+          <div class="postcard-front-slot {{ slot.slot_class }}">
+            <div class="postcard-front-slot-media">
+              {% if slot.image_url %}
+                <img src="{{ slot.image_url }}" alt="Front image {{ loop.index }}" crossorigin="anonymous" referrerpolicy="no-referrer">
+              {% endif %}
+            </div>
           </div>
-        </div>
-      {% endfor %}
-    </div>
+        {% endfor %}
+      </div>
+    {% endif %}
   {%- endmacro %}
   <div class="sun-glow"></div>
   <div class="sun-rays"></div>
@@ -3761,7 +3786,7 @@ def format_message_lines(message: str, max_lines: int = 3, max_chars_per_line: i
 
 def resolve_postcard_assets(details):
     template = get_template_for_product(details["product_title"])
-    front_image_url = str(details.get("front_image_url", "") or "").strip()
+    front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url", "") or "").strip()
     back_image_url = str(details.get("back_image_url", "") or "").strip()
 
     if front_image_url and back_image_url:
@@ -4003,7 +4028,7 @@ def create_prodigi_postcard_pdf(front_url, back_url):
 
     return combined_url
 def build_prodigi_payload(details, payload, postcard_url):
-    front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url") or "").strip()
+    front_image_url = str(details.get("print_front_image_url") or "").strip()
     back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
     combined_print_url = create_prodigi_postcard_pdf(front_image_url, back_image_url)
     shipping = get_shipping_address(payload)
@@ -4418,18 +4443,22 @@ def view_postcard(slug):
 
     postcard_data = dict(postcard)
 
-    front_images = load_front_image_urls(
-        postcard_data.get("front_image_urls", ""),
-        postcard_data.get("front_image_url", ""),
-    )
-
     print_front_image_url = str(postcard_data.get("print_front_image_url", "") or "").strip()
+    if print_front_image_url:
+        front_images = [print_front_image_url]
+    else:
+        front_images = load_front_image_urls(
+            postcard_data.get("front_image_urls", ""),
+            postcard_data.get("front_image_url", ""),
+        )
 
     postcard_layout_key = normalize_postcard_layout_key(
         postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
     )
 
-    if postcard_layout_key == "single" and len(front_images) > 1:
+    if print_front_image_url:
+        postcard_layout_key = "single-full"
+    elif postcard_layout_key == "single" and len(front_images) > 1:
         postcard_layout_key = infer_layout_key_from_image_count(len(front_images))
 
     postcard_frame_key = normalize_postcard_frame_key(
@@ -4445,13 +4474,17 @@ def view_postcard(slug):
     frame_preset = POSTCARD_FRAME_PRESETS[postcard_frame_key]
     rendered_back_image_url = str(postcard_data.get("rendered_back_image_url", "") or "").strip()
 
-    if front_images:
+    if print_front_image_url:
+        postcard_data["front_image_url"] = print_front_image_url
+        postcard_data["front_image_urls"] = json.dumps([print_front_image_url], ensure_ascii=False)
+        postcard_data["postcard_background_image"] = ""
+    elif front_images:
         postcard_data["front_image_url"] = front_images[0]
+        postcard_data["front_image_urls"] = json.dumps(front_images, ensure_ascii=False)
 
     if rendered_back_image_url:
         postcard_data["back_image_url"] = rendered_back_image_url
 
-    postcard_data["front_image_urls"] = json.dumps(front_images, ensure_ascii=False)
     postcard_data["postcard_layout"] = postcard_data.get("postcard_layout") or layout_preset["label"]
     postcard_data["postcard_layout_key"] = postcard_layout_key
     postcard_data["postcard_frame"] = postcard_data.get("postcard_frame") or frame_preset["label"]
@@ -4581,4 +4614,3 @@ def previews():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)
-

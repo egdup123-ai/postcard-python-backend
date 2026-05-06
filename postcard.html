@@ -1038,6 +1038,24 @@
       display: block;
     }
 
+    .postcard-front-art--rendered {
+      display: block;
+      padding: 0;
+      gap: 0;
+      background: #fff;
+    }
+
+    .postcard-front-art--rendered::before {
+      display: none;
+    }
+
+    .postcard-front-rendered-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
     .postcard-front-art.is-trio .slot-a {
       grid-column: 1;
       grid-row: 1 / span 2;
@@ -1480,21 +1498,28 @@
   {% set resolved_layout_class = postcard_layout_class|default('is-single', true) %}
   {% set resolved_frame_class = postcard_frame_class|default('frame-classic-ivory', true) %}
   {% macro render_front_art(extra_class='') -%}
-    <div class="postcard-front-art {{ resolved_layout_class }} {{ resolved_frame_class }} {{ extra_class }}">
-      {% set front_background = postcard['postcard_background_image']|default('', true)|trim %}
-      {% if front_background %}
-        <img class="postcard-front-background" src="{{ front_background }}" alt="">
-      {% endif %}
-      {% for slot in front_slot_items %}
-        <div class="postcard-front-slot {{ slot.slot_class }}">
-          <div class="postcard-front-slot-media">
-            {% if slot.image_url %}
-              <img src="{{ slot.image_url }}" alt="Front image {{ loop.index }}">
-            {% endif %}
+    {% set print_front = postcard['print_front_image_url']|default('', true)|trim %}
+    {% if print_front %}
+      <div class="postcard-front-art postcard-front-art--rendered {{ extra_class }}">
+        <img class="postcard-front-rendered-image" src="{{ print_front }}" alt="Postcard front">
+      </div>
+    {% else %}
+      <div class="postcard-front-art {{ resolved_layout_class }} {{ resolved_frame_class }} {{ extra_class }}">
+        {% set front_background = postcard['postcard_background_image']|default('', true)|trim %}
+        {% if front_background %}
+          <img class="postcard-front-background" src="{{ front_background }}" alt="">
+        {% endif %}
+        {% for slot in front_slot_items %}
+          <div class="postcard-front-slot {{ slot.slot_class }}">
+            <div class="postcard-front-slot-media">
+              {% if slot.image_url %}
+                <img src="{{ slot.image_url }}" alt="Front image {{ loop.index }}">
+              {% endif %}
+            </div>
           </div>
-        </div>
-      {% endfor %}
-    </div>
+        {% endfor %}
+      </div>
+    {% endif %}
   {%- endmacro %}
   <div class="sun-glow"></div>
   <div class="sun-rays"></div>
