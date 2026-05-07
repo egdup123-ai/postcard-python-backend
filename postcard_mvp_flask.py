@@ -5,17 +5,38 @@ import secrets
 import sqlite3
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from textwrap import wrap
 import re
 import unicodedata
 import io
+import time
 import requests
 from PIL import Image
 
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
+    dict_row = None
+
 app = Flask(__name__)
 DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+USE_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
+
+
+def env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+ORDER_JOB_MAX_ATTEMPTS = env_int("ORDER_JOB_MAX_ATTEMPTS", 5)
+ORDER_JOB_LOCK_TIMEOUT_SECONDS = env_int("ORDER_JOB_LOCK_TIMEOUT_SECONDS", 600)
 
 POSTCARD_MESSAGE_STYLE = {
     "desktop_font_size": "23px",
@@ -376,6 +397,8 @@ VIEW_HTML = r"""
       --accent: #b78b4e;
       --message-font-size: {{ message_style.desktop_font_size }};
       --message-rotation: {{ message_style.rotation }};
+      --postcard-ratio: 152 / 109;
+      --postcard-ratio-number: 1.3944954128;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
       --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
       --drift-x: 0px;
@@ -696,10 +719,10 @@ VIEW_HTML = r"""
 
     .scene-layout {
       position: relative;
-      width: min(100%, 1100px);
+      width: min(100%, 1280px);
       display: grid;
-      grid-template-columns: minmax(150px, 190px) minmax(0, 1fr) minmax(150px, 190px);
-      gap: clamp(18px, 3vw, 32px);
+      grid-template-columns: minmax(112px, 132px) minmax(0, 1fr) minmax(112px, 132px);
+      gap: clamp(12px, 2vw, 24px);
       align-items: center;
       margin-top: 34px;
     }
@@ -787,8 +810,8 @@ VIEW_HTML = r"""
 
     .scene {
       position: relative;
-      width: min(80vw, 620px);
-      aspect-ratio: 3 / 2;
+      width: min(78vw, calc((100svh - 170px) * var(--postcard-ratio-number)), 720px);
+      aspect-ratio: var(--postcard-ratio);
       display: grid;
       place-items: center;
       perspective: 2200px;
@@ -1116,7 +1139,7 @@ VIEW_HTML = r"""
     .face img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
@@ -1153,7 +1176,7 @@ VIEW_HTML = r"""
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
       pointer-events: none;
       z-index: 0;
@@ -1417,7 +1440,7 @@ VIEW_HTML = r"""
     .postcard-front-slot-media img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
@@ -1435,7 +1458,7 @@ VIEW_HTML = r"""
     .postcard-front-rendered-image {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 .postcard-front-slot {
@@ -1452,7 +1475,7 @@ VIEW_HTML = r"""
 .postcard-front-art .postcard-front-slot-media img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   display: block;
 }.postcard-front-art .postcard-front-slot {
   padding: 5px;
@@ -1568,7 +1591,7 @@ VIEW_HTML = r"""
       position: absolute;
       inset: 0;
       z-index: 0;
-      object-fit: cover;
+      object-fit: fill;
       opacity: 1;
       filter: none;
     }
@@ -1787,7 +1810,7 @@ VIEW_HTML = r"""
     .keepsake-preview-face img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
@@ -1942,7 +1965,7 @@ VIEW_HTML = r"""
 
       .scene {
         grid-area: scene;
-        width: min(92vw, calc((100svh - 220px) * 1.5), 620px);
+        width: min(92vw, calc((100svh - 220px) * var(--postcard-ratio-number)), 620px);
       }
 
       .controls {
@@ -2018,7 +2041,7 @@ VIEW_HTML = r"""
       }
 
       .scene {
-        width: min(96vw, calc((100svh - 205px) * 1.5), 520px);
+        width: min(96vw, calc((100svh - 205px) * var(--postcard-ratio-number)), 520px);
       }
 
       .controls {
@@ -2056,7 +2079,7 @@ VIEW_HTML = r"""
       }
 
       .scene {
-        width: min(90vw, calc((100svh - 190px) * 1.5), 480px);
+        width: min(90vw, calc((100svh - 190px) * var(--postcard-ratio-number)), 480px);
       }
 
       .controls {
@@ -2765,7 +2788,7 @@ PREVIEWS_HTML = r"""
     .thumb img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
@@ -2860,7 +2883,151 @@ PREVIEWS_HTML = r"""
 """
 
 
+class PostgresConnection:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def execute(self, query, params=None):
+        statement = str(query or "")
+        if statement.strip().upper() == "BEGIN IMMEDIATE":
+            statement = "BEGIN"
+        statement = statement.replace("?", "%s")
+        return self.connection.execute(statement, params or ())
+
+    def commit(self):
+        self.connection.commit()
+
+    def rollback(self):
+        self.connection.rollback()
+
+    def close(self):
+        self.connection.close()
+
+
+def get_postgres_connection():
+    if psycopg is None:
+        raise RuntimeError("DATABASE_URL is set, but psycopg is not installed.")
+
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+
+def ensure_postgres_db():
+    conn = get_postgres_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS postcards (
+            id BIGSERIAL PRIMARY KEY,
+            order_id TEXT,
+            order_name TEXT,
+            slug TEXT UNIQUE NOT NULL,
+            product_title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            from_name TEXT NOT NULL DEFAULT '',
+            to_name TEXT NOT NULL DEFAULT '',
+            front_image_url TEXT NOT NULL,
+            back_image_url TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            front_image_urls TEXT NOT NULL DEFAULT '[]',
+            postcard_layout TEXT NOT NULL DEFAULT 'Single Photo',
+            postcard_layout_key TEXT NOT NULL DEFAULT 'single',
+            postcard_frame TEXT NOT NULL DEFAULT 'Classic Ivory',
+            postcard_frame_key TEXT NOT NULL DEFAULT 'classic-ivory',
+            postcard_font TEXT NOT NULL DEFAULT 'Caveat',
+            postcard_font_key TEXT NOT NULL DEFAULT 'caveat',
+            postcard_background_image TEXT NOT NULL DEFAULT '',
+            postcard_template TEXT NOT NULL DEFAULT '',
+            rendered_back_image_url TEXT NOT NULL DEFAULT '',
+            print_front_image_url TEXT NOT NULL DEFAULT '',
+            print_ready TEXT NOT NULL DEFAULT '',
+            print_generated_at TEXT NOT NULL DEFAULT '',
+            prodigi_status TEXT NOT NULL DEFAULT '',
+            prodigi_response TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+
+    postcard_columns = {
+        "from_name": "TEXT NOT NULL DEFAULT ''",
+        "to_name": "TEXT NOT NULL DEFAULT ''",
+        "front_image_urls": "TEXT NOT NULL DEFAULT '[]'",
+        "postcard_layout": "TEXT NOT NULL DEFAULT 'Single Photo'",
+        "postcard_layout_key": "TEXT NOT NULL DEFAULT 'single'",
+        "postcard_frame": "TEXT NOT NULL DEFAULT 'Classic Ivory'",
+        "postcard_frame_key": "TEXT NOT NULL DEFAULT 'classic-ivory'",
+        "postcard_font": "TEXT NOT NULL DEFAULT 'Caveat'",
+        "postcard_font_key": "TEXT NOT NULL DEFAULT 'caveat'",
+        "postcard_background_image": "TEXT NOT NULL DEFAULT ''",
+        "postcard_template": "TEXT NOT NULL DEFAULT ''",
+        "rendered_back_image_url": "TEXT NOT NULL DEFAULT ''",
+        "print_front_image_url": "TEXT NOT NULL DEFAULT ''",
+        "print_ready": "TEXT NOT NULL DEFAULT ''",
+        "print_generated_at": "TEXT NOT NULL DEFAULT ''",
+        "prodigi_status": "TEXT NOT NULL DEFAULT ''",
+        "prodigi_response": "TEXT NOT NULL DEFAULT ''",
+    }
+    existing_postcard_columns = {
+        row["column_name"]
+        for row in conn.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'postcards'
+            """
+        ).fetchall()
+    }
+    for column_name, column_type in postcard_columns.items():
+        if column_name not in existing_postcard_columns:
+            conn.execute(f"ALTER TABLE postcards ADD COLUMN {column_name} {column_type}")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webhook_debug_events (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            order_id TEXT,
+            order_name TEXT,
+            order_property_keys TEXT NOT NULL DEFAULT '[]',
+            line_item_property_keys TEXT NOT NULL DEFAULT '[]',
+            extracted_message_length INTEGER NOT NULL DEFAULT 0,
+            extracted_from_length INTEGER NOT NULL DEFAULT 0,
+            extracted_to_length INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_jobs (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_topic TEXT NOT NULL DEFAULT '',
+            order_id TEXT NOT NULL DEFAULT '',
+            order_name TEXT NOT NULL DEFAULT '',
+            dedupe_key TEXT UNIQUE NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            locked_at TEXT NOT NULL DEFAULT '',
+            finished_at TEXT NOT NULL DEFAULT '',
+            last_error TEXT NOT NULL DEFAULT '',
+            result_json TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_webhook_debug_events_created_at ON webhook_debug_events(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_order_jobs_status_created_at ON order_jobs(status, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_order_jobs_order_id ON order_jobs(order_id)")
+    conn.commit()
+    conn.close()
+
+
 def ensure_db():
+    if USE_POSTGRES:
+        ensure_postgres_db()
+        return
+
     conn = sqlite3.connect(DATABASE)
     conn.execute(
         """
@@ -2935,10 +3102,36 @@ def ensure_db():
         """
     )
     conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS order_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            source_topic TEXT NOT NULL DEFAULT '',
+            order_id TEXT NOT NULL DEFAULT '',
+            order_name TEXT NOT NULL DEFAULT '',
+            dedupe_key TEXT UNIQUE NOT NULL,
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            attempts INTEGER NOT NULL DEFAULT 0,
+            locked_at TEXT NOT NULL DEFAULT '',
+            finished_at TEXT NOT NULL DEFAULT '',
+            last_error TEXT NOT NULL DEFAULT '',
+            result_json TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_webhook_debug_events_created_at ON webhook_debug_events(created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_order_jobs_status_created_at ON order_jobs(status, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_order_jobs_order_id ON order_jobs(order_id)"
     )
     conn.commit()
     conn.close()
@@ -2946,8 +3139,11 @@ def ensure_db():
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
+        if USE_POSTGRES:
+            g.db = PostgresConnection(get_postgres_connection())
+        else:
+            g.db = sqlite3.connect(DATABASE)
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -3305,7 +3501,6 @@ def pick_property_values(named_values):
     postcard_delivery_key = ""
     fulfilment_route = ""
     front_image_urls = []
-    numbered_front_images = {}
     postcard_layout = ""
     postcard_layout_key = ""
     postcard_frame = ""
@@ -3316,16 +3511,9 @@ def pick_property_values(named_values):
 
     for prop_name, prop_value in named_values:
         normalized_prop_name = normalize_property_name(prop_name)
-        front_image_index = extract_front_image_index(normalized_prop_name)
 
         if normalized_prop_name in MESSAGE_PROPERTY_NAMES and prop_value and not message:
             message = prop_value
-        elif normalized_prop_name in FRONT_IMAGE_URL_PROPERTY_NAMES and prop_value and not front_image_url:
-            front_image_url = prop_value
-        elif normalized_prop_name in FRONT_IMAGE_URLS_PROPERTY_NAMES and prop_value:
-            for image_url in split_image_url_values(prop_value):
-                if image_url not in front_image_urls:
-                    front_image_urls.append(image_url)
         elif normalized_prop_name in BACK_IMAGE_URL_PROPERTY_NAMES and prop_value and not back_image_url:
             back_image_url = prop_value
         elif normalized_prop_name in BACKGROUND_IMAGE_PROPERTY_NAMES and prop_value and not postcard_background_image:
@@ -3362,19 +3550,13 @@ def pick_property_values(named_values):
             postcard_font = prop_value
         elif normalized_prop_name in FONT_KEY_PROPERTY_NAMES and prop_value and not postcard_font_key:
             postcard_font_key = prop_value
-        elif front_image_index is not None and prop_value:
-            numbered_front_images[front_image_index] = prop_value
 
-    for index in sorted(numbered_front_images):
-        image_url = numbered_front_images[index]
-        if image_url and image_url not in front_image_urls:
-            front_image_urls.append(image_url)
-
-    if front_image_url and front_image_url not in front_image_urls:
-        front_image_urls.insert(0, front_image_url)
-
-    if front_image_urls and not front_image_url:
-        front_image_url = front_image_urls[0]
+    # The rendered postcard front is the source of truth. Ignore old/raw
+    # Front Image URL(s) properties so recreated links and PDFs cannot drift
+    # from the live Shopify preview.
+    if print_front_image_url:
+        front_image_url = print_front_image_url
+        front_image_urls = [print_front_image_url]
 
     normalized_layout_key = normalize_postcard_layout_key(postcard_layout_key or postcard_layout)
     normalized_frame_key = normalize_postcard_frame_key(postcard_frame_key or postcard_frame)
@@ -3596,8 +3778,8 @@ def extract_postcard_details(payload):
     message = order_level_values["message"]
     from_name = order_level_values["from_name"]
     to_name = order_level_values["to_name"]
-    front_image_url = order_level_values["front_image_url"]
-    front_image_urls = list(order_level_values["front_image_urls"])
+    front_image_url = ""
+    front_image_urls = []
     back_image_url = order_level_values["back_image_url"]
     postcard_background_image = order_level_values["postcard_background_image"]
     rendered_back_image_url = order_level_values["rendered_back_image_url"]
@@ -3625,18 +3807,6 @@ def extract_postcard_details(payload):
 
         if item_values["message"] and not message:
             message = item_values["message"]
-            if item_product_title:
-                product_title = item_product_title
-
-        if item_values["front_image_url"] and not front_image_url:
-            front_image_url = item_values["front_image_url"]
-            if item_product_title:
-                product_title = item_product_title
-
-        if item_values["front_image_urls"]:
-            for image_url in item_values["front_image_urls"]:
-                if image_url and image_url not in front_image_urls:
-                    front_image_urls.append(image_url)
             if item_product_title:
                 product_title = item_product_title
 
@@ -3684,16 +3854,10 @@ def extract_postcard_details(payload):
             postcard_font_key = item_values["postcard_font_key"]
             postcard_font = item_values["postcard_font"]
 
-    if not message or not from_name or not to_name or not front_image_url or not back_image_url or not front_image_urls or not postcard_background_image or not rendered_back_image_url:
+    if not message or not from_name or not to_name or not print_front_image_url or not back_image_url or not postcard_background_image or not rendered_back_image_url:
         deep_values = pick_property_values(iter_named_values_deep(payload))
         if deep_values["message"] and not message:
             message = deep_values["message"]
-        if deep_values["front_image_url"] and not front_image_url:
-            front_image_url = deep_values["front_image_url"]
-        if deep_values["front_image_urls"]:
-            for image_url in deep_values["front_image_urls"]:
-                if image_url and image_url not in front_image_urls:
-                    front_image_urls.append(image_url)
         if deep_values["back_image_url"] and not back_image_url:
             back_image_url = deep_values["back_image_url"]
         if deep_values["postcard_background_image"] and not postcard_background_image:
@@ -3728,11 +3892,9 @@ def extract_postcard_details(payload):
             postcard_font_key = deep_values["postcard_font_key"]
             postcard_font = deep_values["postcard_font"]
 
-    if front_image_urls and not front_image_url:
-        front_image_url = front_image_urls[0]
-
-    if front_image_url and front_image_url not in front_image_urls:
-        front_image_urls.insert(0, front_image_url)
+    if print_front_image_url:
+        front_image_url = print_front_image_url
+        front_image_urls = [print_front_image_url]
 
     return {
         "order_id": order_id,
@@ -3786,7 +3948,7 @@ def format_message_lines(message: str, max_lines: int = 3, max_chars_per_line: i
 
 def resolve_postcard_assets(details):
     template = get_template_for_product(details["product_title"])
-    front_image_url = str(details.get("print_front_image_url") or details.get("front_image_url", "") or "").strip()
+    front_image_url = str(details.get("print_front_image_url") or "").strip()
     back_image_url = str(details.get("back_image_url", "") or "").strip()
 
     if front_image_url and back_image_url:
@@ -3798,8 +3960,11 @@ def resolve_postcard_assets(details):
     if template is None:
         return None
 
+    if not front_image_url:
+        return None
+
     return {
-        "front": front_image_url or template["front"],
+        "front": front_image_url,
         "back": back_image_url or template["back"],
     }
 
@@ -3988,7 +4153,9 @@ def create_prodigi_postcard_pdf(front_url, back_url):
     front = load_image(front_url)
     back = load_image(back_url)
 
-    target_size = (1800, 1200)
+    # Prodigi Classic Postcard lists the print size as 152 x 109 mm.
+    # At 300 DPI this is roughly 1795 x 1287 px, which avoids 3:2 cropping.
+    target_size = (1795, 1287)
 
     front = front.resize(target_size, Image.LANCZOS)
     back = back.resize(target_size, Image.LANCZOS)
@@ -4041,7 +4208,7 @@ def build_prodigi_payload(details, payload, postcard_url):
     if len(country_code) != 2:
         country_code = payload.get("shipping_address", {}).get("country_code", "") or country_code
 
-        assets = [
+    assets = [
         {
             "printArea": "default",
             "url": combined_print_url,
@@ -4114,8 +4281,8 @@ def should_send_to_prodigi(details, source_topic):
     return True, "ready"
 
 
-def submit_prodigi_order(details, payload, postcard_url):
-    should_send, reason = should_send_to_prodigi(details, request.headers.get("X-Shopify-Topic", ""))
+def submit_prodigi_order(details, payload, postcard_url, source_topic=""):
+    should_send, reason = should_send_to_prodigi(details, source_topic)
     if not should_send:
         print(
             "Prodigi skipped:",
@@ -4269,6 +4436,230 @@ def log_webhook_debug_event(topic, payload, details):
     db.commit()
 
 
+def build_order_job_dedupe_key(source_topic, details):
+    topic = str(source_topic or "unknown").strip() or "unknown"
+    order_id = str(details.get("order_id", "") or "").strip()
+    order_name = str(details.get("order_name", "") or "").strip()
+    order_ref = order_id or order_name or secrets.token_urlsafe(8)
+    return f"{topic}:{order_ref}"
+
+
+def enqueue_order_job(payload, source_topic, details):
+    now = utc_now_iso()
+    dedupe_key = build_order_job_dedupe_key(source_topic, details)
+    payload_json = json.dumps(payload or {}, ensure_ascii=False)
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO order_jobs (
+            created_at,
+            updated_at,
+            source_topic,
+            order_id,
+            order_name,
+            dedupe_key,
+            payload_json,
+            status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+        ON CONFLICT(dedupe_key) DO UPDATE SET
+            updated_at = excluded.updated_at,
+            source_topic = excluded.source_topic,
+            order_id = excluded.order_id,
+            order_name = excluded.order_name,
+            payload_json = excluded.payload_json,
+            status = CASE
+                WHEN order_jobs.status IN ('done', 'processing') THEN order_jobs.status
+                ELSE 'pending'
+            END,
+            last_error = CASE
+                WHEN order_jobs.status IN ('done', 'processing') THEN order_jobs.last_error
+                ELSE ''
+            END
+        """,
+        (
+            now,
+            now,
+            str(source_topic or ""),
+            str(details.get("order_id", "") or ""),
+            str(details.get("order_name", "") or ""),
+            dedupe_key,
+            payload_json,
+        ),
+    )
+    db.commit()
+    return db.execute(
+        "SELECT id, status, attempts FROM order_jobs WHERE dedupe_key = ?",
+        (dedupe_key,),
+    ).fetchone()
+
+
+def claim_next_order_job():
+    db = get_db()
+    now = utc_now_iso()
+    stale_locked_at = (
+        datetime.now(timezone.utc) - timedelta(seconds=ORDER_JOB_LOCK_TIMEOUT_SECONDS)
+    ).isoformat()
+
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        job = db.execute(
+            """
+            SELECT *
+            FROM order_jobs
+            WHERE (
+                status = 'pending'
+                AND attempts < ?
+            )
+            OR (
+                status = 'processing'
+                AND attempts < ?
+                AND locked_at < ?
+            )
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (ORDER_JOB_MAX_ATTEMPTS, ORDER_JOB_MAX_ATTEMPTS, stale_locked_at),
+        ).fetchone()
+
+        if not job:
+            db.commit()
+            return None
+
+        db.execute(
+            """
+            UPDATE order_jobs
+            SET status = 'processing',
+                attempts = attempts + 1,
+                locked_at = ?,
+                updated_at = ?,
+                last_error = ''
+            WHERE id = ?
+            """,
+            (now, now, job["id"]),
+        )
+        db.commit()
+        return db.execute(
+            "SELECT * FROM order_jobs WHERE id = ?",
+            (job["id"],),
+        ).fetchone()
+    except sqlite3.OperationalError as error:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        print(f"Order job claim skipped: {error}", flush=True)
+        return None
+
+
+def complete_order_job(job_id, result):
+    now = utc_now_iso()
+    db = get_db()
+    db.execute(
+        """
+        UPDATE order_jobs
+        SET status = 'done',
+            updated_at = ?,
+            finished_at = ?,
+            last_error = '',
+            result_json = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            now,
+            json.dumps(result or {}, ensure_ascii=False)[:8000],
+            job_id,
+        ),
+    )
+    db.commit()
+
+
+def fail_order_job(job, error):
+    now = utc_now_iso()
+    attempts = int(job["attempts"] or 0)
+    next_status = "failed" if attempts >= ORDER_JOB_MAX_ATTEMPTS else "pending"
+    db = get_db()
+    db.execute(
+        """
+        UPDATE order_jobs
+        SET status = ?,
+            updated_at = ?,
+            locked_at = '',
+            last_error = ?
+        WHERE id = ?
+        """,
+        (
+            next_status,
+            now,
+            str(error or "")[:4000],
+            job["id"],
+        ),
+    )
+    db.commit()
+
+
+def process_order_job(job):
+    payload = json.loads(job["payload_json"] or "{}")
+    return process_shopify_order_payload(
+        payload,
+        source_topic=job["source_topic"],
+        log_debug=False,
+    )
+
+
+def run_order_job_worker_loop(poll_interval=None, once=False):
+    ensure_db()
+    interval = float(poll_interval if poll_interval is not None else os.getenv("ORDER_JOB_POLL_INTERVAL", "2.0"))
+    print("Order job worker started", flush=True)
+
+    while True:
+        processed_job = False
+
+        with app.app_context():
+            job = claim_next_order_job()
+            if job:
+                processed_job = True
+                try:
+                    result = process_order_job(job)
+                    complete_order_job(job["id"], result)
+                    print(
+                        "Order job completed:",
+                        json.dumps(
+                            {
+                                "job_id": job["id"],
+                                "order_id": job["order_id"],
+                                "order_name": job["order_name"],
+                                "result": result,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+                except Exception as error:
+                    fail_order_job(job, error)
+                    print(
+                        "Order job failed:",
+                        json.dumps(
+                            {
+                                "job_id": job["id"],
+                                "order_id": job["order_id"],
+                                "order_name": job["order_name"],
+                                "attempts": job["attempts"],
+                                "error": str(error),
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
+
+        if once:
+            break
+
+        if not processed_job:
+            time.sleep(interval)
+
+
 @app.route("/")
 def home():
     return "Server radi", 200
@@ -4279,18 +4670,18 @@ def health():
     return "ok", 200
 
 
-def process_shopify_order_webhook():
-    payload = request.get_json(silent=True) or {}
-    source_topic = str(request.headers.get("X-Shopify-Topic", "")).strip()
+def process_shopify_order_payload(payload, source_topic="", log_debug=False):
     details = extract_postcard_details(payload)
     property_names = []
     for item in payload.get("line_items", []):
         for prop_name, _prop_value in extract_line_item_properties(item):
             if prop_name and prop_name not in property_names:
                 property_names.append(prop_name)
-    log_webhook_debug_event(source_topic, payload, details)
+    if log_debug:
+        log_webhook_debug_event(source_topic, payload, details)
+
     print(json.dumps({
-        "event": "shopify_order_webhook",
+        "event": "shopify_order_processing",
         "topic": source_topic,
         "order_id_raw": str(payload.get("id", "")).strip(),
         "order_id_normalized": details["order_id"],
@@ -4304,17 +4695,17 @@ def process_shopify_order_webhook():
 
     assets = resolve_postcard_assets(details)
     if assets is None:
-        return jsonify({
+        raise ValueError(json.dumps({
             "ok": False,
             "error": "Could not resolve postcard assets",
             "topic": source_topic,
             "product_title": details["product_title"],
             "order_id": details["order_id"],
-        }), 200
+        }, ensure_ascii=False))
 
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
-    prodigi_result = submit_prodigi_order(details, payload, postcard_url)
+    prodigi_result = submit_prodigi_order(details, payload, postcard_url, source_topic)
    
     print(
     "Prodigi result:",
@@ -4324,13 +4715,48 @@ def process_shopify_order_webhook():
 
     update_prodigi_status(details["order_id"], prodigi_result)
 
-    return jsonify({
+    return {
         "ok": True,
         "slug": slug,
         "url": postcard_url,
         "topic": source_topic,
         "order_id": details["order_id"],
         "prodigi": prodigi_result,
+    }
+
+
+def process_shopify_order_webhook():
+    payload = request.get_json(silent=True) or {}
+    source_topic = str(request.headers.get("X-Shopify-Topic", "")).strip()
+    details = extract_postcard_details(payload)
+    property_names = []
+    for item in payload.get("line_items", []):
+        for prop_name, _prop_value in extract_line_item_properties(item):
+            if prop_name and prop_name not in property_names:
+                property_names.append(prop_name)
+
+    log_webhook_debug_event(source_topic, payload, details)
+    job = enqueue_order_job(payload, source_topic, details)
+
+    print(json.dumps({
+        "event": "shopify_order_webhook_queued",
+        "topic": source_topic,
+        "order_id_raw": str(payload.get("id", "")).strip(),
+        "order_id_normalized": details["order_id"],
+        "order_name": details["order_name"],
+        "line_item_count": len(payload.get("line_items", [])),
+        "property_names": property_names,
+        "job_id": job["id"] if job else None,
+        "job_status": job["status"] if job else "",
+    }, ensure_ascii=True), flush=True)
+
+    return jsonify({
+        "ok": True,
+        "queued": True,
+        "job_id": job["id"] if job else None,
+        "job_status": job["status"] if job else "",
+        "topic": source_topic,
+        "order_id": details["order_id"],
     }), 200
 
 
@@ -4444,22 +4870,16 @@ def view_postcard(slug):
     postcard_data = dict(postcard)
 
     print_front_image_url = str(postcard_data.get("print_front_image_url", "") or "").strip()
-    if print_front_image_url:
-        front_images = [print_front_image_url]
-    else:
-        front_images = load_front_image_urls(
-            postcard_data.get("front_image_urls", ""),
-            postcard_data.get("front_image_url", ""),
-        )
+    if not print_front_image_url:
+        return "Razglednica nije spremna: nedostaje Print Front Image URL.", 404
+
+    front_images = [print_front_image_url]
 
     postcard_layout_key = normalize_postcard_layout_key(
         postcard_data.get("postcard_layout_key", "") or postcard_data.get("postcard_layout", "")
     )
 
-    if print_front_image_url:
-        postcard_layout_key = "single-full"
-    elif postcard_layout_key == "single" and len(front_images) > 1:
-        postcard_layout_key = infer_layout_key_from_image_count(len(front_images))
+    postcard_layout_key = "single-full"
 
     postcard_frame_key = normalize_postcard_frame_key(
         postcard_data.get("postcard_frame_key", "") or postcard_data.get("postcard_frame", "")
@@ -4474,13 +4894,9 @@ def view_postcard(slug):
     frame_preset = POSTCARD_FRAME_PRESETS[postcard_frame_key]
     rendered_back_image_url = str(postcard_data.get("rendered_back_image_url", "") or "").strip()
 
-    if print_front_image_url:
-        postcard_data["front_image_url"] = print_front_image_url
-        postcard_data["front_image_urls"] = json.dumps([print_front_image_url], ensure_ascii=False)
-        postcard_data["postcard_background_image"] = ""
-    elif front_images:
-        postcard_data["front_image_url"] = front_images[0]
-        postcard_data["front_image_urls"] = json.dumps(front_images, ensure_ascii=False)
+    postcard_data["front_image_url"] = print_front_image_url
+    postcard_data["front_image_urls"] = json.dumps([print_front_image_url], ensure_ascii=False)
+    postcard_data["postcard_background_image"] = ""
 
     if rendered_back_image_url:
         postcard_data["back_image_url"] = rendered_back_image_url
