@@ -4132,7 +4132,7 @@ def get_shipping_address(payload):
         "phone": shipping.get("phone") or "",
     }
 
-def create_prodigi_postcard_pdf(front_url, back_url):
+def create_prodigi_postcard_print_file(front_url, back_url):
     if not front_url or not back_url:
         raise ValueError("Missing front or back image URL for Prodigi print file.")
 
@@ -4140,7 +4140,7 @@ def create_prodigi_postcard_pdf(front_url, back_url):
     cloudinary_preset = os.getenv("CLOUDINARY_UPLOAD_PRESET", "").strip()
 
     if not cloudinary_endpoint:
-        cloudinary_endpoint = "https://api.cloudinary.com/v1_1/dcjku2arh/raw/upload"
+        cloudinary_endpoint = "https://api.cloudinary.com/v1_1/dcjku2arh/image/upload"
 
     if not cloudinary_preset:
         cloudinary_preset = "shopify_postcard_upload"
@@ -4183,16 +4183,17 @@ def create_prodigi_postcard_pdf(front_url, back_url):
     spread.paste(back, (0, 0))
     spread.paste(front, (target_size[0], 0))
 
-    pdf_buffer = io.BytesIO()
+    image_buffer = io.BytesIO()
     spread.save(
-        pdf_buffer,
-        format="PDF",
-        resolution=300.0,
+        image_buffer,
+        format="JPEG",
+        quality=95,
+        dpi=(300, 300),
     )
-    pdf_buffer.seek(0)
+    image_buffer.seek(0)
 
     files = {
-        "file": ("prodigi-postcard.pdf", pdf_buffer, "application/pdf")
+        "file": ("prodigi-postcard.jpg", image_buffer, "image/jpeg")
     }
 
     data = {
@@ -4212,13 +4213,13 @@ def create_prodigi_postcard_pdf(front_url, back_url):
     combined_url = upload_data.get("secure_url") or upload_data.get("url")
 
     if not combined_url:
-        raise ValueError("Cloudinary did not return a combined Prodigi PDF URL.")
+        raise ValueError("Cloudinary did not return a combined Prodigi print file URL.")
 
     return combined_url
 def build_prodigi_payload(details, payload, postcard_url):
     front_image_url = str(details.get("print_front_image_url") or "").strip()
     back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
-    combined_print_url = create_prodigi_postcard_pdf(front_image_url, back_image_url)
+    combined_print_url = create_prodigi_postcard_print_file(front_image_url, back_image_url)
     shipping = get_shipping_address(payload)
 
     recipient_name = " ".join(
@@ -4521,6 +4522,38 @@ def claim_next_order_job():
     stale_locked_at = (
         datetime.now(timezone.utc) - timedelta(seconds=ORDER_JOB_LOCK_TIMEOUT_SECONDS)
     ).isoformat()
+
+    if USE_POSTGRES:
+        job = db.execute(
+            """
+            UPDATE order_jobs
+            SET status = 'processing',
+                attempts = attempts + 1,
+                locked_at = ?,
+                updated_at = ?,
+                last_error = ''
+            WHERE id = (
+                SELECT id
+                FROM order_jobs
+                WHERE (
+                    status = 'pending'
+                    AND attempts < ?
+                )
+                OR (
+                    status = 'processing'
+                    AND attempts < ?
+                    AND locked_at < ?
+                )
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            RETURNING *
+            """,
+            (now, now, ORDER_JOB_MAX_ATTEMPTS, ORDER_JOB_MAX_ATTEMPTS, stale_locked_at),
+        ).fetchone()
+        db.commit()
+        return job
 
     try:
         db.execute("BEGIN IMMEDIATE")
