@@ -4150,23 +4150,44 @@ def create_prodigi_postcard_pdf(front_url, back_url):
         response.raise_for_status()
         return Image.open(io.BytesIO(response.content)).convert("RGB")
 
-    front = load_image(front_url)
     back = load_image(back_url)
+    front = load_image(front_url)
 
-    # Prodigi Classic Postcard lists the print size as 152 x 109 mm.
-    # At 300 DPI this is roughly 1795 x 1287 px, which avoids 3:2 cropping.
-    target_size = (1795, 1287)
+    # Prodigi Classic Postcard template recommends a combined spread of
+    # 3588 x 1287 px, so each side is exactly 1794 x 1287 px.
+    target_size = (1794, 1287)
 
-    front = front.resize(target_size, Image.LANCZOS)
-    back = back.resize(target_size, Image.LANCZOS)
+    def prepare_prodigi_side(image, scale_x=0.98, scale_y=None):
+        if scale_y is None:
+            scale_y = scale_x
+
+        canvas = Image.new("RGB", target_size, "white")
+        artwork_size = (
+            max(1, int(target_size[0] * scale_x)),
+            max(1, int(target_size[1] * scale_y)),
+        )
+        artwork = image.resize(artwork_size, Image.LANCZOS)
+        offset = (
+            (target_size[0] - artwork_size[0]) // 2,
+            (target_size[1] - artwork_size[1]) // 2,
+        )
+        canvas.paste(artwork, offset)
+        return canvas
+
+    back = prepare_prodigi_side(back, scale_x=0.94, scale_y=0.94)
+    front = prepare_prodigi_side(front, scale_x=1.0, scale_y=0.94)
+
+    # Prodigi postcard artwork is supplied as one PDF page with both sides
+    # side-by-side: back artwork first, then front artwork.
+    spread = Image.new("RGB", (target_size[0] * 2, target_size[1]), "white")
+    spread.paste(back, (0, 0))
+    spread.paste(front, (target_size[0], 0))
 
     pdf_buffer = io.BytesIO()
-    front.save(
+    spread.save(
         pdf_buffer,
         format="PDF",
         resolution=300.0,
-        save_all=True,
-        append_images=[back],
     )
     pdf_buffer.seek(0)
 

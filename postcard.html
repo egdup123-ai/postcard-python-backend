@@ -28,6 +28,8 @@
       --card-shadow-strong: 0 58px 140px rgba(44, 72, 89, 0.16);
       --glass: rgba(255, 255, 255, 0.7);
       --message-font-size: {{ message_style.desktop_font_size|default('18px') }};
+      --postcard-ratio: 152 / 109;
+      --postcard-ratio-number: 1.3944954128;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
       --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
       --ease-luxury: cubic-bezier(0.19, 1, 0.22, 1);
@@ -332,7 +334,7 @@
     .scene {
       position: relative;
       width: min(82vw, 660px);
-      aspect-ratio: 3 / 2;
+      aspect-ratio: var(--postcard-ratio);
       display: grid;
       place-items: center;
       perspective: 2200px;
@@ -551,7 +553,7 @@
     .postcard-shell {
       position: absolute;
       inset: 8% 6%;
-      aspect-ratio: 3 / 2;
+      aspect-ratio: var(--postcard-ratio);
       height: auto;
       z-index: 5;
       opacity: 0;
@@ -734,7 +736,7 @@
     .face img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
@@ -771,7 +773,7 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
       pointer-events: none;
       z-index: 0;
@@ -1034,12 +1036,13 @@
     .postcard-front-slot-media img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: fill;
       display: block;
     }
 
     .postcard-front-art--rendered {
-      display: block;
+      display: grid;
+      place-items: center;
       padding: 0;
       gap: 0;
       background: #fff;
@@ -1051,8 +1054,8 @@
 
     .postcard-front-rendered-image {
       width: 100%;
-      height: 100%;
-      object-fit: cover;
+      height: 94%;
+      object-fit: fill;
       display: block;
     }
 
@@ -1150,7 +1153,7 @@
       position: absolute;
       inset: 0;
       z-index: 0;
-      object-fit: cover;
+      object-fit: fill;
       opacity: 1;
       filter: none;
     }
@@ -1370,7 +1373,7 @@
       }
 
       .scene {
-        width: min(92vw, calc((100svh - 190px) * 1.5), 620px);
+        width: min(92vw, calc((100svh - 190px) * var(--postcard-ratio-number)), 620px);
       }
 
       .controls {
@@ -1421,7 +1424,7 @@
       }
 
       .scene {
-        width: min(96vw, calc((100svh - 165px) * 1.5), 520px);
+        width: min(96vw, calc((100svh - 165px) * var(--postcard-ratio-number)), 520px);
       }
 
       .controls {
@@ -1450,7 +1453,7 @@
       }
 
       .scene {
-        width: min(90vw, calc((100svh - 150px) * 1.5), 480px);
+        width: min(90vw, calc((100svh - 150px) * var(--postcard-ratio-number)), 480px);
       }
 
       .controls {
