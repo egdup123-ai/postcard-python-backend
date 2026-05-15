@@ -26,6 +26,7 @@ DATABASE = os.getenv("DATABASE_PATH", "postcards.db")
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 USE_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 PUBLIC_POSTCARD_BASE_URL = os.getenv("PUBLIC_POSTCARD_BASE_URL", "https://postcard.sendamemory.store").rstrip("/")
+ADMIN_LINKS_PASSWORD = os.getenv("ADMIN_LINKS_PASSWORD", "IDEGAS")
 
 
 def env_int(name, default):
@@ -37,6 +38,27 @@ def env_int(name, default):
 
 ORDER_JOB_MAX_ATTEMPTS = env_int("ORDER_JOB_MAX_ATTEMPTS", 5)
 ORDER_JOB_LOCK_TIMEOUT_SECONDS = env_int("ORDER_JOB_LOCK_TIMEOUT_SECONDS", 600)
+
+
+def is_admin_links_authorized() -> bool:
+    if not ADMIN_LINKS_PASSWORD:
+        return True
+
+    provided_password = str(request.args.get("password", "") or request.headers.get("X-Admin-Password", ""))
+
+    if request.authorization and request.authorization.password:
+        provided_password = request.authorization.password
+
+    return secrets.compare_digest(provided_password, ADMIN_LINKS_PASSWORD)
+
+
+def require_admin_links_password():
+    if is_admin_links_authorized():
+        return None
+
+    response = make_response("Password required.", 401)
+    response.headers["WWW-Authenticate"] = 'Basic realm="Postcard previews"'
+    return response
 
 POSTCARD_MESSAGE_STYLE = {
     "desktop_font_size": "23px",
@@ -4985,6 +5007,10 @@ def view_postcard(slug):
 
 @app.route("/api/debug/postcards", methods=["GET"])
 def debug_postcards():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
     limit = max(1, min(int(request.args.get("limit", "10")), 50))
     order_id = str(request.args.get("orderId", "")).strip()
 
@@ -5016,6 +5042,10 @@ def debug_postcards():
 
 @app.route("/api/debug/webhooks", methods=["GET"])
 def debug_webhooks():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
     limit = max(1, min(int(request.args.get("limit", "10")), 50))
     db = get_db()
     rows = db.execute(
@@ -5053,6 +5083,10 @@ def debug_webhooks():
 
 @app.route("/latest")
 def latest_postcard():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
     db = get_db()
     postcard = db.execute(
         "SELECT * FROM postcards ORDER BY id DESC LIMIT 1"
@@ -5066,6 +5100,10 @@ def latest_postcard():
 
 @app.route("/previews")
 def previews():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
     db = get_db()
     postcards = db.execute(
         """
