@@ -2139,7 +2139,7 @@ VIEW_HTML = r"""
     {% set print_front = postcard['print_front_image_url']|default('', true)|trim %}
     {% if print_front %}
       <div class="postcard-front-art postcard-front-art--rendered {{ extra_class }}">
-        <img class="postcard-front-rendered-image" src="{{ print_front }}" alt="Postcard front" crossorigin="anonymous" referrerpolicy="no-referrer">
+        <img class="postcard-front-rendered-image" src="{{ print_front }}" alt="Postcard front" referrerpolicy="no-referrer">
       </div>
     {% else %}
       <div class="postcard-front-art {{ postcard_layout_class }} {{ postcard_frame_class }} {{ extra_class }}">
@@ -2216,7 +2216,7 @@ VIEW_HTML = r"""
               </article>
 
               <article class="face back">
-                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
+                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" referrerpolicy="no-referrer">
                 {% if not hide_message_overlay %}
                 <div
                   class="message-area"
