@@ -4,6 +4,7 @@ import os
 import secrets
 import sqlite3
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
 from textwrap import wrap
@@ -13,6 +14,11 @@ import io
 import time
 import requests
 from PIL import Image
+
+try:
+    import boto3
+except ImportError:
+    boto3 = None
 
 try:
     import psycopg
@@ -4154,10 +4160,8 @@ def get_shipping_address(payload):
         "phone": shipping.get("phone") or "",
     }
 
-def create_prodigi_postcard_print_file(front_url, back_url):
-    if not front_url or not back_url:
-        raise ValueError("Missing front or back image URL for Prodigi print file.")
 
+def upload_file_to_cloudinary(file_obj, filename, content_type, folder):
     cloudinary_endpoint = os.getenv("CLOUDINARY_UPLOAD_ENDPOINT", "").strip()
     cloudinary_preset = os.getenv("CLOUDINARY_UPLOAD_PRESET", "").strip()
 
@@ -4166,6 +4170,93 @@ def create_prodigi_postcard_print_file(front_url, back_url):
 
     if not cloudinary_preset:
         cloudinary_preset = "shopify_postcard_upload"
+
+    file_obj.seek(0)
+    upload_response = requests.post(
+        cloudinary_endpoint,
+        files={"file": (filename, file_obj, content_type)},
+        data={
+            "upload_preset": cloudinary_preset,
+            "folder": folder,
+        },
+        timeout=60,
+    )
+    upload_response.raise_for_status()
+
+    upload_data = upload_response.json()
+    uploaded_url = upload_data.get("secure_url") or upload_data.get("url")
+
+    if not uploaded_url:
+        raise ValueError("Cloudinary did not return an uploaded file URL.")
+
+    return uploaded_url
+
+
+def upload_file_to_r2(file_obj, filename, content_type, folder):
+    if boto3 is None:
+        raise RuntimeError("STORAGE_PROVIDER=r2 is set, but boto3 is not installed.")
+
+    endpoint = os.getenv("R2_ENDPOINT", "").strip()
+    access_key_id = os.getenv("R2_ACCESS_KEY_ID", "").strip()
+    secret_access_key = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
+    bucket = os.getenv("R2_BUCKET", "").strip()
+    public_base_url = os.getenv("R2_PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+    missing = [
+        name
+        for name, value in {
+            "R2_ENDPOINT": endpoint,
+            "R2_ACCESS_KEY_ID": access_key_id,
+            "R2_SECRET_ACCESS_KEY": secret_access_key,
+            "R2_BUCKET": bucket,
+            "R2_PUBLIC_BASE_URL": public_base_url,
+        }.items()
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing R2 environment variables: {', '.join(missing)}")
+
+    extension = os.path.splitext(filename)[1] or ""
+    object_name = f"{secrets.token_urlsafe(16)}{extension}"
+    object_key = f"{folder.strip('/')}/{object_name}"
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+        region_name="auto",
+    )
+
+    file_obj.seek(0)
+    client.put_object(
+        Bucket=bucket,
+        Key=object_key,
+        Body=file_obj.read(),
+        ContentType=content_type,
+        CacheControl="public, max-age=31536000, immutable",
+    )
+
+    return f"{public_base_url}/{urllib.parse.quote(object_key, safe='/')}"
+
+
+def upload_file_to_storage(file_obj, filename, content_type, folder):
+    storage_provider = os.getenv("STORAGE_PROVIDER", "cloudinary").strip().lower()
+
+    if storage_provider == "r2":
+        try:
+            return upload_file_to_r2(file_obj, filename, content_type, folder)
+        except Exception as exc:
+            if os.getenv("STORAGE_FALLBACK_TO_CLOUDINARY", "true").strip().lower() not in {"1", "true", "yes", "on"}:
+                raise
+            print(f"R2 upload failed, falling back to Cloudinary: {exc}")
+
+    return upload_file_to_cloudinary(file_obj, filename, content_type, folder)
+
+
+def create_prodigi_postcard_print_file(front_url, back_url):
+    if not front_url or not back_url:
+        raise ValueError("Missing front or back image URL for Prodigi print file.")
 
     def load_image(url):
         response = requests.get(url, timeout=30)
@@ -4214,28 +4305,15 @@ def create_prodigi_postcard_print_file(front_url, back_url):
     )
     image_buffer.seek(0)
 
-    files = {
-        "file": ("prodigi-postcard.jpg", image_buffer, "image/jpeg")
-    }
-
-    data = {
-        "upload_preset": cloudinary_preset,
-        "folder": "postcards/prodigi-print-files",
-    }
-
-    upload_response = requests.post(
-        cloudinary_endpoint,
-        files=files,
-        data=data,
-        timeout=60,
+    combined_url = upload_file_to_storage(
+        image_buffer,
+        "prodigi-postcard.jpg",
+        "image/jpeg",
+        "postcards/prodigi-print-files",
     )
-    upload_response.raise_for_status()
-
-    upload_data = upload_response.json()
-    combined_url = upload_data.get("secure_url") or upload_data.get("url")
 
     if not combined_url:
-        raise ValueError("Cloudinary did not return a combined Prodigi print file URL.")
+        raise ValueError("Storage did not return a combined Prodigi print file URL.")
 
     return combined_url
 def build_prodigi_payload(details, payload, postcard_url):
