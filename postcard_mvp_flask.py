@@ -4161,40 +4161,9 @@ def get_shipping_address(payload):
     }
 
 
-def upload_file_to_cloudinary(file_obj, filename, content_type, folder):
-    cloudinary_endpoint = os.getenv("CLOUDINARY_UPLOAD_ENDPOINT", "").strip()
-    cloudinary_preset = os.getenv("CLOUDINARY_UPLOAD_PRESET", "").strip()
-
-    if not cloudinary_endpoint:
-        cloudinary_endpoint = "https://api.cloudinary.com/v1_1/dcjku2arh/image/upload"
-
-    if not cloudinary_preset:
-        cloudinary_preset = "shopify_postcard_upload"
-
-    file_obj.seek(0)
-    upload_response = requests.post(
-        cloudinary_endpoint,
-        files={"file": (filename, file_obj, content_type)},
-        data={
-            "upload_preset": cloudinary_preset,
-            "folder": folder,
-        },
-        timeout=60,
-    )
-    upload_response.raise_for_status()
-
-    upload_data = upload_response.json()
-    uploaded_url = upload_data.get("secure_url") or upload_data.get("url")
-
-    if not uploaded_url:
-        raise ValueError("Cloudinary did not return an uploaded file URL.")
-
-    return uploaded_url
-
-
 def upload_file_to_r2(file_obj, filename, content_type, folder):
     if boto3 is None:
-        raise RuntimeError("STORAGE_PROVIDER=r2 is set, but boto3 is not installed.")
+        raise RuntimeError("boto3 is not installed.")
 
     endpoint = os.getenv("R2_ENDPOINT", "").strip()
     access_key_id = os.getenv("R2_ACCESS_KEY_ID", "").strip()
@@ -4241,17 +4210,7 @@ def upload_file_to_r2(file_obj, filename, content_type, folder):
 
 
 def upload_file_to_storage(file_obj, filename, content_type, folder):
-    storage_provider = os.getenv("STORAGE_PROVIDER", "cloudinary").strip().lower()
-
-    if storage_provider == "r2":
-        try:
-            return upload_file_to_r2(file_obj, filename, content_type, folder)
-        except Exception as exc:
-            if os.getenv("STORAGE_FALLBACK_TO_CLOUDINARY", "true").strip().lower() not in {"1", "true", "yes", "on"}:
-                raise
-            print(f"R2 upload failed, falling back to Cloudinary: {exc}")
-
-    return upload_file_to_cloudinary(file_obj, filename, content_type, folder)
+    return upload_file_to_r2(file_obj, filename, content_type, folder)
 
 
 def create_prodigi_postcard_print_file(front_url, back_url):
@@ -4836,7 +4795,9 @@ def upload_generated_asset():
     folder = str(request.form.get("folder", "postcards/uploads") or "postcards/uploads").strip()
     allowed_folders = {
         "postcards/fronts",
+        "postcards/fronts-rendered",
         "postcards/backs",
+        "postcards/backs-rendered",
         "postcards/backgrounds",
         "postcards/prodigi-print-files",
         "postcards/uploads",
