@@ -4824,6 +4824,47 @@ def health():
     return "ok", 200
 
 
+@app.route("/api/upload", methods=["POST", "OPTIONS"])
+def upload_generated_asset():
+    if request.method == "OPTIONS":
+        return cors_preflight_response()
+
+    uploaded_file = request.files.get("file")
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({"ok": False, "error": "Missing upload file."}), 400
+
+    folder = str(request.form.get("folder", "postcards/uploads") or "postcards/uploads").strip()
+    allowed_folders = {
+        "postcards/fronts",
+        "postcards/backs",
+        "postcards/backgrounds",
+        "postcards/prodigi-print-files",
+        "postcards/uploads",
+    }
+    if folder not in allowed_folders:
+        folder = "postcards/uploads"
+
+    filename = str(request.form.get("filename", "") or uploaded_file.filename or "postcard-upload.jpg").strip()
+    content_type = uploaded_file.mimetype or "application/octet-stream"
+
+    try:
+        uploaded_url = upload_file_to_storage(
+            uploaded_file.stream,
+            filename,
+            content_type,
+            folder,
+        )
+    except Exception as exc:
+        print(f"Generated asset upload failed: {exc}", flush=True)
+        return jsonify({"ok": False, "error": "Upload failed."}), 500
+
+    return jsonify({
+        "ok": True,
+        "url": uploaded_url,
+        "secure_url": uploaded_url,
+    }), 200
+
+
 def process_shopify_order_payload(payload, source_topic="", log_debug=False):
     details = extract_postcard_details(payload)
     property_names = []
