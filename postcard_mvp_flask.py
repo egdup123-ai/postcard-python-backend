@@ -3059,7 +3059,8 @@ def ensure_postgres_db():
             city TEXT NOT NULL DEFAULT '',
             postal_code TEXT NOT NULL DEFAULT '',
             country TEXT NOT NULL DEFAULT '',
-            delivery_method TEXT NOT NULL DEFAULT ''
+            delivery_method TEXT NOT NULL DEFAULT '',
+            print_format_version TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -3083,6 +3084,7 @@ def ensure_postgres_db():
         "address_line2": "TEXT NOT NULL DEFAULT ''", "city": "TEXT NOT NULL DEFAULT ''",
         "postal_code": "TEXT NOT NULL DEFAULT ''", "country": "TEXT NOT NULL DEFAULT ''",
         "delivery_method": "TEXT NOT NULL DEFAULT ''",
+        "print_format_version": "TEXT NOT NULL DEFAULT ''",
     }
     batch_columns = {
         "printed_at": "TEXT NOT NULL DEFAULT ''",
@@ -3227,7 +3229,8 @@ def ensure_db():
             city TEXT NOT NULL DEFAULT '',
             postal_code TEXT NOT NULL DEFAULT '',
             country TEXT NOT NULL DEFAULT '',
-            delivery_method TEXT NOT NULL DEFAULT ''
+            delivery_method TEXT NOT NULL DEFAULT '',
+            print_format_version TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -3251,6 +3254,7 @@ def ensure_db():
         "address_line2": "TEXT NOT NULL DEFAULT ''", "city": "TEXT NOT NULL DEFAULT ''",
         "postal_code": "TEXT NOT NULL DEFAULT ''", "country": "TEXT NOT NULL DEFAULT ''",
         "delivery_method": "TEXT NOT NULL DEFAULT ''",
+        "print_format_version": "TEXT NOT NULL DEFAULT ''",
     }
     batch_columns = {
         "printed_at": "TEXT NOT NULL DEFAULT ''",
@@ -4424,6 +4428,17 @@ def upload_file_to_storage(file_obj, filename, content_type, folder):
     return upload_file_to_r2(file_obj, filename, content_type, folder)
 
 
+LOCAL_PRINT_DPI = 300
+LOCAL_PRINT_TRIM_WIDTH_MM = 148
+LOCAL_PRINT_TRIM_HEIGHT_MM = 105
+LOCAL_PRINT_BLEED_MM = 3
+LOCAL_PRINT_FORMAT_VERSION = "a6-3mm-bleed-v1"
+
+
+def mm_to_px(value):
+    return round(float(value) * LOCAL_PRINT_DPI / 25.4)
+
+
 def create_combined_print_ready_file(front_url, back_url):
     if not front_url or not back_url:
         raise ValueError("Missing front or back image URL for print-ready file.")
@@ -4436,28 +4451,26 @@ def create_combined_print_ready_file(front_url, back_url):
     back = load_image(back_url)
     front = load_image(front_url)
 
-    # Keep the verified print-ready spread: back first, then front.
-    target_size = (1794, 1287)
+    # Keep the verified print-ready spread order: back first, then front.
+    # Artwork covers the complete bleed area so trimming never exposes a white edge.
+    target_size = (
+        mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM + LOCAL_PRINT_BLEED_MM * 2),
+        mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM + LOCAL_PRINT_BLEED_MM * 2),
+    )
 
-    def prepare_print_side(image, scale_x=0.98, scale_y=None):
-        if scale_y is None:
-            scale_y = scale_x
-
-        canvas = Image.new("RGB", target_size, "white")
+    def prepare_print_side(image):
+        scale = max(target_size[0] / image.width, target_size[1] / image.height)
         artwork_size = (
-            max(1, int(target_size[0] * scale_x)),
-            max(1, int(target_size[1] * scale_y)),
+            max(1, round(image.width * scale)),
+            max(1, round(image.height * scale)),
         )
-        artwork = image.resize(artwork_size, Image.LANCZOS)
-        offset = (
-            (target_size[0] - artwork_size[0]) // 2,
-            (target_size[1] - artwork_size[1]) // 2,
-        )
-        canvas.paste(artwork, offset)
-        return canvas
+        artwork = image.resize(artwork_size, Image.Resampling.LANCZOS)
+        left = max(0, (artwork.width - target_size[0]) // 2)
+        top = max(0, (artwork.height - target_size[1]) // 2)
+        return artwork.crop((left, top, left + target_size[0], top + target_size[1]))
 
-    back = prepare_print_side(back, scale_x=0.94, scale_y=0.94)
-    front = prepare_print_side(front, scale_x=1.0, scale_y=0.94)
+    back = prepare_print_side(back)
+    front = prepare_print_side(front)
 
     spread = Image.new("RGB", (target_size[0] * 2, target_size[1]), "white")
     spread.paste(back, (0, 0))
@@ -4542,7 +4555,10 @@ def get_local_print_missing_fields(item):
         ("postal_code", "postal code"),
         ("country", "country"),
     )
-    return [label for key, label in required if not str(item[key] or "").strip()]
+    missing = [label for key, label in required if not str(item[key] or "").strip()]
+    if str(item["print_format_version"] or "").strip() != LOCAL_PRINT_FORMAT_VERSION:
+        missing.append("current A6 + 3 mm bleed JPG")
+    return missing
 
 
 def validate_local_print_items(items):
@@ -4586,8 +4602,8 @@ def enqueue_local_print_order(details, postcard_url, source_topic="", payload=No
         INSERT INTO local_print_queue (
             created_at, order_id, order_name, postcard_url, combined_print_url, status,
             recipient_name, address_line1, address_line2, city, postal_code, country,
-            delivery_method
-        ) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, ?, ?, ?, ?, ?)
+            delivery_method, print_format_version
+        ) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(order_id) DO NOTHING
         """,
         (
@@ -4603,6 +4619,7 @@ def enqueue_local_print_order(details, postcard_url, source_topic="", payload=No
             shipping["postal_code"],
             shipping["country"],
             shipping["delivery_method"],
+            LOCAL_PRINT_FORMAT_VERSION,
         ),
     )
     db.commit()
@@ -4636,26 +4653,27 @@ def load_remote_rgb_image(url):
     return Image.open(io.BytesIO(response.content)).convert("RGB")
 
 
-def mm_to_px(value):
-    return round(float(value) * 300 / 25.4)
-
-
 def draw_local_print_sheet(items, use_front):
     page = Image.new("RGB", (mm_to_px(450), mm_to_px(320)), "white")
     draw = ImageDraw.Draw(page)
-    card_w, card_h = mm_to_px(109), mm_to_px(152)
-    gap_x, gap_y = mm_to_px(2), mm_to_px(2)
-    grid_w = card_w * 4 + gap_x * 3
-    grid_h = card_h * 2 + gap_y
+    card_w = mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM + LOCAL_PRINT_BLEED_MM * 2)
+    card_h = mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM + LOCAL_PRINT_BLEED_MM * 2)
+    trim_w = mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM)
+    trim_h = mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM)
+    bleed = mm_to_px(LOCAL_PRINT_BLEED_MM)
+    grid_w = card_w * 4
+    grid_h = card_h * 2
     origin_x = (page.width - grid_w) // 2
     origin_y = (page.height - grid_h) // 2
     mark = mm_to_px(2)
+    trim_x_positions = set()
+    trim_y_positions = set()
 
     for index, item in enumerate(items):
         row, column = divmod(index, 4)
         target_column = column if use_front else 3 - column
-        x = origin_x + target_column * (card_w + gap_x)
-        y = origin_y + row * (card_h + gap_y)
+        x = origin_x + target_column * card_w
+        y = origin_y + row * card_h
         spread = load_remote_rgb_image(item["combined_print_url"])
         side_w = spread.width // 2
         box = (side_w, 0, spread.width, spread.height) if use_front else (0, 0, side_w, spread.height)
@@ -4663,17 +4681,20 @@ def draw_local_print_sheet(items, use_front):
         side = side.resize((card_w, card_h), Image.Resampling.LANCZOS)
         page.paste(side, (x, y))
 
+        trim_x_positions.update((x + bleed, x + bleed + trim_w))
+        trim_y_positions.update((y + bleed, y + bleed + trim_h))
         label = f"{item['order_name'] or item['order_id']} / S{index + 1} / {'FRONT' if use_front else 'BACK'}"
-        label_y = max(2, y - 14)
+        label_y = max(2, origin_y - 14) if row == 0 else min(page.height - 12, origin_y + grid_h + 2)
         draw.text((x + 4, label_y), label, fill=(50, 50, 50))
-        for edge_x, direction in ((x, -1), (x + card_w, 1)):
-            draw.line((edge_x, y, edge_x + direction * mark, y), fill=(30, 30, 30), width=1)
-            draw.line((edge_x, y + card_h, edge_x + direction * mark, y + card_h), fill=(30, 30, 30), width=1)
-        for edge_y, direction in ((y, -1), (y + card_h, 1)):
-            draw.line((x, edge_y, x, edge_y + direction * mark), fill=(30, 30, 30), width=1)
-            draw.line((x + card_w, edge_y, x + card_w, edge_y + direction * mark), fill=(30, 30, 30), width=1)
 
-    draw.text((origin_x, 4), f"{'FRONT' if use_front else 'BACK'} / TOP", fill=(20, 20, 20))
+    for trim_x in trim_x_positions:
+        draw.line((trim_x, origin_y - mark, trim_x, origin_y - 1), fill=(30, 30, 30), width=1)
+        draw.line((trim_x, origin_y + grid_h + 1, trim_x, origin_y + grid_h + mark), fill=(30, 30, 30), width=1)
+    for trim_y in trim_y_positions:
+        draw.line((origin_x - mark, trim_y, origin_x - 1, trim_y), fill=(30, 30, 30), width=1)
+        draw.line((origin_x + grid_w + 1, trim_y, origin_x + grid_w + mark, trim_y), fill=(30, 30, 30), width=1)
+
+    draw.text((4, 4), f"{'FRONT' if use_front else 'BACK'} / TOP / A6 + 3 mm BLEED", fill=(20, 20, 20))
     return page
 
 
@@ -5693,7 +5714,7 @@ def local_print_admin():
     <div>
       <p class="eyebrow">Send A Memory print studio</p>
       <h1>Local print queue</h1>
-      <p class="muted">Each full batch contains 8 postcards and generates one two-page SRA3 duplex PDF for the print shop.</p>
+      <p class="muted">Each full batch contains 8 postcards and generates one two-page SRA3 duplex PDF. Every new postcard uses A6 trim size with 3 mm bleed on all sides.</p>
       <div class="progress"><span style="width:{{ [waiting|length, 8]|min * 12.5 }}%"></span></div>
       <p class="muted"><strong>{{ waiting|length }}</strong> postcards waiting. {% if waiting|length >= 8 %}A full batch is ready.{% else %}{{ 8 - waiting|length }} more until the next full batch.{% endif %}</p>
     </div>
@@ -5701,7 +5722,7 @@ def local_print_admin():
   </section>
   <section class="panel">
     <h2>Generate a print batch</h2>
-    <p class="muted">Use this manually when you want to print fewer than 8 postcards. Full batches are generated automatically.</p>
+    <p class="muted">Use this manually when you want to print fewer than 8 postcards. Full batches are generated automatically. Crop marks sit outside the artwork so the print shop can trim safely.</p>
     {% if generated_batch %}<p class="ok">Generated {{ generated_batch.batch_code }}: <a href="{{ generated_batch.pdf_url }}">download PDF</a></p>{% endif %}
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
     <form class="actions" method="post" action="/admin/local-print?password={{ password }}">
