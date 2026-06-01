@@ -5346,44 +5346,64 @@ def local_print_admin():
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Local print batches</title>
+  <title>Send A Memory - Local print</title>
   <style>
-    body{margin:0;padding:24px;background:#f7f1e8;color:#2f2923;font:15px Arial,sans-serif}
-    main{max-width:1080px;margin:auto}.panel{margin:0 0 18px;padding:18px;border:1px solid #decdb7;border-radius:16px;background:#fffdf9}
-    h1,h2{margin:0 0 12px}p{line-height:1.5}.grid{display:grid;gap:10px}.row{padding:12px;border:1px solid #eadfce;border-radius:12px;background:#fff}
-    a{color:#805b2d;font-weight:700}.button{display:inline-block;padding:11px 16px;border:0;border-radius:10px;background:#4a2f1f;color:#fff;cursor:pointer;font-weight:700}
-    input{width:64px;padding:10px;border:1px solid #decdb7;border-radius:8px}.ok{color:#287445}.error{color:#a22626}
+    :root{--bg:#f5eee4;--paper:#fffdf9;--line:#e5d7c4;--ink:#30271f;--muted:#806f5d;--brown:#4a2f1f;--gold:#b88b4c;--green:#287445;--red:#a22626}
+    *{box-sizing:border-box}body{margin:0;padding:28px 18px 48px;background:linear-gradient(180deg,#fbf7f0,var(--bg));color:var(--ink);font:15px Arial,sans-serif}
+    main{width:min(100%,1120px);margin:auto}.eyebrow{margin:0 0 8px;color:#9a7543;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+    h1,h2,p{margin-top:0}h1{margin-bottom:7px;font-size:clamp(28px,5vw,42px);letter-spacing:-.05em}h2{margin-bottom:14px;font-size:22px;letter-spacing:-.025em}
+    .muted{color:var(--muted);line-height:1.55}.panel{margin:0 0 16px;padding:20px;border:1px solid var(--line);border-radius:20px;background:rgba(255,253,249,.94);box-shadow:0 14px 34px rgba(71,48,18,.06)}
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center}.counter{display:grid;place-items:center;width:128px;height:128px;border:1px solid #dbc39c;border-radius:50%;background:#fff9ef;text-align:center}
+    .counter strong{display:block;font-size:31px;line-height:1}.counter span{display:block;margin-top:5px;color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+    .progress{height:10px;margin:18px 0 12px;overflow:hidden;border-radius:999px;background:#eee2d2}.progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),#795126)}
+    .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid #7a5232;border-radius:11px;background:linear-gradient(135deg,#302117,var(--brown));color:#fff;text-decoration:none;cursor:pointer;font-weight:800}
+    input{width:70px;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit}.ok,.error{padding:11px 13px;border-radius:10px}.ok{background:#eaf7ee;color:var(--green)}.error{background:#fff0ed;color:var(--red)}
+    .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{display:grid;gap:9px;padding:14px;border:1px solid #eee2d3;border-radius:14px;background:#fff}.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .badge{padding:5px 8px;border-radius:999px;background:#f7ecdc;color:#8c6839;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.meta{color:var(--muted);font-size:12px;line-height:1.45;word-break:break-word}.links{display:flex;gap:8px;flex-wrap:wrap}.links a{color:#805b2d;font-size:13px;font-weight:800;text-decoration:none}.links a:hover{text-decoration:underline}
+    .empty{padding:18px;border:1px dashed #ddcdb7;border-radius:12px;color:var(--muted);text-align:center}.batch{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px;border-bottom:1px solid #eee2d3}.batch:last-child{border-bottom:0}.download{display:inline-flex;align-items:center;min-height:38px;padding:0 12px;border-radius:9px;background:#fff3df;color:#6d4826;font-size:13px;font-weight:800;text-decoration:none}
+    @media(max-width:680px){body{padding:16px 10px 30px}.panel{padding:15px;border-radius:16px}.hero{grid-template-columns:1fr}.counter{width:102px;height:102px}.cards{grid-template-columns:1fr}.batch{grid-template-columns:1fr}.button{width:100%}}
   </style>
 </head>
 <body>
 <main>
+  <section class="panel hero">
+    <div>
+      <p class="eyebrow">Send A Memory print studio</p>
+      <h1>Local print queue</h1>
+      <p class="muted">Each full batch contains 8 postcards and generates one two-page SRA3 duplex PDF for the print shop.</p>
+      <div class="progress"><span style="width:{{ [waiting|length, 8]|min * 12.5 }}%"></span></div>
+      <p class="muted"><strong>{{ waiting|length }}</strong> postcards waiting. {% if waiting|length >= 8 %}A full batch is ready.{% else %}{{ 8 - waiting|length }} more until the next full batch.{% endif %}</p>
+    </div>
+    <div class="counter"><div><strong>{{ waiting|length }}/8</strong><span>waiting</span></div></div>
+  </section>
   <section class="panel">
-    <h1>Local SRA3 print queue</h1>
-    <p><strong>{{ waiting|length }} waiting</strong>. Generate up to 8 postcards as a two-page SRA3 duplex PDF.</p>
+    <h2>Generate a print batch</h2>
+    <p class="muted">Use this manually when you want to print fewer than 8 postcards. Full batches are generated automatically.</p>
     {% if generated_batch %}<p class="ok">Generated {{ generated_batch.batch_code }}: <a href="{{ generated_batch.pdf_url }}">download PDF</a></p>{% endif %}
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
-    <form method="post" action="/admin/local-print?password={{ password }}">
-      <label>Cards in batch <input name="limit" type="number" min="1" max="8" value="{{ 8 if waiting|length >= 8 else waiting|length or 1 }}"></label>
+    <form class="actions" method="post" action="/admin/local-print?password={{ password }}">
+      <label>Cards in batch: <input name="limit" type="number" min="1" max="8" value="{{ 8 if waiting|length >= 8 else waiting|length or 1 }}"></label>
       <button class="button" type="submit">Generate SRA3 PDF</button>
-    </form>
-    <form method="post" action="/admin/local-print/test-email?password={{ password }}" style="margin-top:10px">
-      <button class="button" type="submit">Send test email</button>
     </form>
   </section>
   <section class="panel">
-    <h2>Waiting postcards</h2>
-    <div class="grid">
+    <h2>Waiting postcards <span class="badge">{{ waiting|length }} queued</span></h2>
+    <div class="cards">
       {% for item in waiting %}
-      <div class="row"><strong>{{ item.order_name or item.order_id }}</strong> · {{ item.created_at }} · <a href="{{ item.combined_print_url }}">print-ready JPG</a> · <a href="{{ item.postcard_url }}">postcard</a></div>
-      {% else %}<p>No postcards are waiting.</p>{% endfor %}
+      <article class="card">
+        <div class="card-head"><strong>{{ item.order_name or item.order_id }}</strong><span class="badge">waiting</span></div>
+        <div class="meta">Added: {{ item.created_at }}</div>
+        <div class="links"><a href="{{ item.combined_print_url }}" target="_blank">Open print-ready JPG</a><a href="{{ item.postcard_url }}" target="_blank">Open postcard</a></div>
+      </article>
+      {% else %}<p class="empty">No postcards are currently waiting for print.</p>{% endfor %}
     </div>
   </section>
   <section class="panel">
-    <h2>Generated batches</h2>
-    <div class="grid">
+    <h2>Generated SRA3 batches</h2>
+    <div>
       {% for batch in batches %}
-      <div class="row"><strong>{{ batch.batch_code }}</strong> · {{ batch.item_count }} cards · {{ batch.created_at }} · <a href="{{ batch.pdf_url }}">download PDF</a></div>
-      {% else %}<p>No batches generated yet.</p>{% endfor %}
+      <div class="batch"><div><strong>{{ batch.batch_code }}</strong><div class="meta">{{ batch.item_count }} postcards | Generated {{ batch.created_at }}</div></div><a class="download" href="{{ batch.pdf_url }}" target="_blank">Download PDF</a></div>
+      {% else %}<p class="empty">No SRA3 batches have been generated yet.</p>{% endfor %}
     </div>
   </section>
 </main>
