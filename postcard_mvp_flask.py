@@ -4624,6 +4624,45 @@ def generate_local_print_batch(limit=8):
     }
 
 
+def generate_local_print_test_batch():
+    page_size = (mm_to_px(450), mm_to_px(320))
+    front_page = Image.new("RGB", page_size, "white")
+    back_page = Image.new("RGB", page_size, "white")
+    for page, side in ((front_page, "FRONT"), (back_page, "BACK")):
+        draw = ImageDraw.Draw(page)
+        draw.rectangle((40, 40, page.width - 40, page.height - 40), outline=(184, 139, 76), width=5)
+        draw.text((90, 90), f"SEND A MEMORY / SRA3 TEST / {side}", fill=(47, 41, 35))
+        draw.text((90, 145), "Download test only - not for customer printing", fill=(126, 109, 91))
+
+    pdf_buffer = io.BytesIO()
+    front_page.save(
+        pdf_buffer,
+        format="PDF",
+        resolution=300,
+        save_all=True,
+        append_images=[back_page],
+    )
+    pdf_buffer.seek(0)
+    pdf_url = upload_file_to_storage(
+        pdf_buffer,
+        "local-print-sra3-download-test.pdf",
+        "application/pdf",
+        "postcards/local-print-batches",
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    batch_code = f"DOWNLOAD-TEST-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO local_print_batches (created_at, batch_code, item_count, pdf_url, status)
+        VALUES (?, ?, 8, ?, 'test')
+        """,
+        (created_at, batch_code, pdf_url),
+    )
+    db.commit()
+    return {"batch_code": batch_code, "item_count": 8, "pdf_url": pdf_url}
+
+
 def log_webhook_debug_event(topic, payload, details):
     db = get_db()
     order_property_keys = []
@@ -5431,6 +5470,19 @@ def local_print_test_email():
     except Exception as exc:
         print(f"Local print SMTP test failed: {exc}", flush=True)
         return jsonify({"sent": False, "reason": "email_failed", "error": str(exc)}), 500
+
+
+@app.route("/admin/local-print/test-pdf", methods=["POST"])
+def local_print_test_pdf():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    try:
+        return jsonify(generate_local_print_test_batch()), 200
+    except Exception as exc:
+        print(f"Local print PDF download test failed: {exc}", flush=True)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @app.route("/latest")
