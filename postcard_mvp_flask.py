@@ -3,17 +3,17 @@ import json
 import os
 import secrets
 import sqlite3
-import urllib.error
 import urllib.parse
-import urllib.request
 from datetime import datetime, timezone, timedelta
 from textwrap import wrap
 import re
 import unicodedata
 import io
+import smtplib
 import time
 import requests
-from PIL import Image
+from email.message import EmailMessage
+from PIL import Image, ImageDraw
 
 try:
     import boto3
@@ -2967,9 +2967,7 @@ def ensure_postgres_db():
             rendered_back_image_url TEXT NOT NULL DEFAULT '',
             print_front_image_url TEXT NOT NULL DEFAULT '',
             print_ready TEXT NOT NULL DEFAULT '',
-            print_generated_at TEXT NOT NULL DEFAULT '',
-            prodigi_status TEXT NOT NULL DEFAULT '',
-            prodigi_response TEXT NOT NULL DEFAULT ''
+            print_generated_at TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -2990,8 +2988,6 @@ def ensure_postgres_db():
         "print_front_image_url": "TEXT NOT NULL DEFAULT ''",
         "print_ready": "TEXT NOT NULL DEFAULT ''",
         "print_generated_at": "TEXT NOT NULL DEFAULT ''",
-        "prodigi_status": "TEXT NOT NULL DEFAULT ''",
-        "prodigi_response": "TEXT NOT NULL DEFAULT ''",
     }
     existing_postcard_columns = {
         row["column_name"]
@@ -3043,10 +3039,50 @@ def ensure_postgres_db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_queue (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            order_id TEXT UNIQUE NOT NULL,
+            order_name TEXT NOT NULL DEFAULT '',
+            postcard_url TEXT NOT NULL DEFAULT '',
+            combined_print_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'waiting',
+            batch_id BIGINT,
+            slot_number INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_batches (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            batch_code TEXT UNIQUE NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            pdf_url TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'generated'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_notifications (
+            id BIGSERIAL PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            notification_key TEXT UNIQUE NOT NULL,
+            recipient TEXT NOT NULL DEFAULT '',
+            item_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_webhook_debug_events_created_at ON webhook_debug_events(created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_order_jobs_status_created_at ON order_jobs(status, created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_order_jobs_order_id ON order_jobs(order_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_local_print_queue_status_created_at ON local_print_queue(status, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_local_print_queue_batch_id ON local_print_queue(batch_id)")
     conn.commit()
     conn.close()
 
@@ -3108,11 +3144,6 @@ def ensure_db():
         conn.execute("ALTER TABLE postcards ADD COLUMN print_ready TEXT NOT NULL DEFAULT ''")
     if "print_generated_at" not in existing_columns:
         conn.execute("ALTER TABLE postcards ADD COLUMN print_generated_at TEXT NOT NULL DEFAULT ''")
-    if "prodigi_status" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN prodigi_status TEXT NOT NULL DEFAULT ''")
-    if "prodigi_response" not in existing_columns:
-        conn.execute("ALTER TABLE postcards ADD COLUMN prodigi_response TEXT NOT NULL DEFAULT ''")
-
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS webhook_debug_events (
@@ -3150,6 +3181,44 @@ def ensure_db():
         """
     )
     conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            order_id TEXT UNIQUE NOT NULL,
+            order_name TEXT NOT NULL DEFAULT '',
+            postcard_url TEXT NOT NULL DEFAULT '',
+            combined_print_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'waiting',
+            batch_id INTEGER,
+            slot_number INTEGER
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            batch_code TEXT UNIQUE NOT NULL,
+            item_count INTEGER NOT NULL DEFAULT 0,
+            pdf_url TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'generated'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS local_print_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            notification_key TEXT UNIQUE NOT NULL,
+            recipient TEXT NOT NULL DEFAULT '',
+            item_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_postcards_order_id ON postcards(order_id)"
     )
     conn.execute(
@@ -3160,6 +3229,12 @@ def ensure_db():
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_order_jobs_order_id ON order_jobs(order_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_local_print_queue_status_created_at ON local_print_queue(status, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_local_print_queue_batch_id ON local_print_queue(batch_id)"
     )
     conn.commit()
     conn.close()
@@ -4142,23 +4217,84 @@ def truthy(value) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "ready"}
 
 
-def get_shipping_address(payload):
-    shipping = payload.get("shipping_address") or payload.get("shippingAddress") or {}
-    if not isinstance(shipping, dict):
-        return {}
+def send_local_print_ready_email(batch):
+    recipient = os.getenv("LOCAL_PRINT_NOTIFICATION_EMAIL", "").strip()
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_username = os.getenv("SMTP_USERNAME", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_from = os.getenv("SMTP_FROM_EMAIL", "").strip() or smtp_username
+    smtp_port = env_int("SMTP_PORT", 465)
 
-    return {
-        "first_name": shipping.get("first_name") or shipping.get("firstName") or "",
-        "last_name": shipping.get("last_name") or shipping.get("lastName") or "",
-        "company": shipping.get("company") or "",
-        "address1": shipping.get("address1") or "",
-        "address2": shipping.get("address2") or "",
-        "city": shipping.get("city") or "",
-        "province": shipping.get("province") or shipping.get("province_code") or shipping.get("provinceCode") or "",
-        "zip": shipping.get("zip") or shipping.get("postal_code") or shipping.get("postalCode") or "",
-        "country": shipping.get("country") or shipping.get("country_code") or shipping.get("countryCode") or "",
-        "phone": shipping.get("phone") or "",
-    }
+    if not recipient or not smtp_host or not smtp_from:
+        return {"sent": False, "reason": "missing_email_config"}
+
+    message = EmailMessage()
+    message["Subject"] = f"Send A Memory: SRA3 print PDF ready ({batch['batch_code']})"
+    message["From"] = smtp_from
+    message["To"] = recipient
+    message.set_content(
+        "\n".join(
+            [
+                f"SRA3 duplex print PDF is ready for {batch['item_count']} postcards.",
+                "",
+                f"Download PDF: {batch['pdf_url']}",
+                "",
+                f"Open admin: {PUBLIC_POSTCARD_BASE_URL}/admin/local-print",
+            ]
+        )
+    )
+
+    if truthy(os.getenv("SMTP_USE_SSL", "true")):
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as smtp:
+            if smtp_username:
+                smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+    else:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+            if truthy(os.getenv("SMTP_STARTTLS", "true")):
+                smtp.starttls()
+            if smtp_username:
+                smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+
+    return {"sent": True, "recipient": recipient}
+
+
+def notify_local_print_batch_ready(batch):
+    db = get_db()
+    notification_key = f"local-print-batch:{batch['batch_code']}"
+    existing = db.execute(
+        "SELECT id FROM local_print_notifications WHERE notification_key = ? LIMIT 1",
+        (notification_key,),
+    ).fetchone()
+    if existing:
+        return {"sent": False, "reason": "already_notified"}
+
+    try:
+        result = send_local_print_ready_email(batch)
+    except Exception as exc:
+        print(f"Local print notification email failed: {exc}", flush=True)
+        return {"sent": False, "reason": "email_failed", "error": str(exc)}
+
+    if not result.get("sent"):
+        return result
+
+    db.execute(
+        """
+        INSERT INTO local_print_notifications (
+            created_at, notification_key, recipient, item_count
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(notification_key) DO NOTHING
+        """,
+        (
+            datetime.now(timezone.utc).isoformat(),
+            notification_key,
+            result.get("recipient", ""),
+            batch["item_count"],
+        ),
+    )
+    db.commit()
+    return result
 
 
 def upload_file_to_r2(file_obj, filename, content_type, folder):
@@ -4213,9 +4349,9 @@ def upload_file_to_storage(file_obj, filename, content_type, folder):
     return upload_file_to_r2(file_obj, filename, content_type, folder)
 
 
-def create_prodigi_postcard_print_file(front_url, back_url):
+def create_combined_print_ready_file(front_url, back_url):
     if not front_url or not back_url:
-        raise ValueError("Missing front or back image URL for Prodigi print file.")
+        raise ValueError("Missing front or back image URL for print-ready file.")
 
     def load_image(url):
         response = requests.get(url, timeout=30)
@@ -4225,11 +4361,10 @@ def create_prodigi_postcard_print_file(front_url, back_url):
     back = load_image(back_url)
     front = load_image(front_url)
 
-    # Prodigi Classic Postcard template recommends a combined spread of
-    # 3588 x 1287 px, so each side is exactly 1794 x 1287 px.
+    # Keep the verified print-ready spread: back first, then front.
     target_size = (1794, 1287)
 
-    def prepare_prodigi_side(image, scale_x=0.98, scale_y=None):
+    def prepare_print_side(image, scale_x=0.98, scale_y=None):
         if scale_y is None:
             scale_y = scale_x
 
@@ -4246,11 +4381,9 @@ def create_prodigi_postcard_print_file(front_url, back_url):
         canvas.paste(artwork, offset)
         return canvas
 
-    back = prepare_prodigi_side(back, scale_x=0.94, scale_y=0.94)
-    front = prepare_prodigi_side(front, scale_x=1.0, scale_y=0.94)
+    back = prepare_print_side(back, scale_x=0.94, scale_y=0.94)
+    front = prepare_print_side(front, scale_x=1.0, scale_y=0.94)
 
-    # Prodigi postcard artwork is supplied as one PDF page with both sides
-    # side-by-side: back artwork first, then front artwork.
     spread = Image.new("RGB", (target_size[0] * 2, target_size[1]), "white")
     spread.paste(back, (0, 0))
     spread.paste(front, (target_size[0], 0))
@@ -4259,87 +4392,27 @@ def create_prodigi_postcard_print_file(front_url, back_url):
     spread.save(
         image_buffer,
         format="JPEG",
-        quality=95,
+        quality=100,
+        subsampling=0,
         dpi=(300, 300),
     )
     image_buffer.seek(0)
 
     combined_url = upload_file_to_storage(
         image_buffer,
-        "prodigi-postcard.jpg",
+        "print-ready-postcard.jpg",
         "image/jpeg",
-        "postcards/prodigi-print-files",
+        "postcards/print-ready-files",
     )
 
     if not combined_url:
-        raise ValueError("Storage did not return a combined Prodigi print file URL.")
+        raise ValueError("Storage did not return a combined print-ready file URL.")
 
     return combined_url
-def build_prodigi_payload(details, payload, postcard_url):
-    front_image_url = str(details.get("print_front_image_url") or "").strip()
-    back_image_url = str(details.get("rendered_back_image_url") or details.get("back_image_url") or "").strip()
-    combined_print_url = create_prodigi_postcard_print_file(front_image_url, back_image_url)
-    shipping = get_shipping_address(payload)
-
-    recipient_name = " ".join(
-        part for part in [shipping.get("first_name", ""), shipping.get("last_name", "")] if part
-    ).strip() or details.get("to_name") or "Postcard recipient"
-
-    country_code = shipping.get("country", "")
-    if len(country_code) != 2:
-        country_code = payload.get("shipping_address", {}).get("country_code", "") or country_code
-
-    assets = [
-        {
-            "printArea": "default",
-            "url": combined_print_url,
-        }
-    ]
-
-    metadata = {
-        "source": "send-a-memory",
-        "shopify_order_id": details.get("order_id", ""),
-        "shopify_order_name": details.get("order_name", ""),
-        "postcard_url": postcard_url,
-        "print_ready": details.get("print_ready", ""),
-        "print_generated_at": details.get("print_generated_at", ""),
-    }
-
-    return {
-        "merchantReference": details.get("order_name") or details.get("order_id"),
-        "shippingMethod": os.getenv("PRODIGI_SHIPPING_METHOD", "Standard").strip() or "Standard",
-        "recipient": {
-            "name": recipient_name,
-            "email": payload.get("email") or payload.get("contact_email") or None,
-            "phoneNumber": shipping.get("phone") or None,
-            "address": {
-                "line1": shipping.get("address1", ""),
-                "line2": shipping.get("address2", "") or None,
-                "postalOrZipCode": shipping.get("zip", ""),
-                "countryCode": country_code,
-                "townOrCity": shipping.get("city", ""),
-                "stateOrCounty": shipping.get("province", "") or None,
-            },
-        },
-        "items": [
-            {
-                "merchantReference": f"{details.get('order_name') or details.get('order_id')}-postcard",
-                "sku": os.getenv("PRODIGI_POSTCARD_SKU", "").strip(),
-                "copies": int(os.getenv("PRODIGI_COPIES", "1") or "1"),
-                "sizing": os.getenv("PRODIGI_SIZING", "fillPrintArea").strip() or "fillPrintArea",
-                "assets": assets,
-            }
-        ],
-        "metadata": metadata,
-        "idempotencyKey": f"sendamemory-{details.get('order_id', '')}",
-    }
 
 
-def should_send_to_prodigi(details, source_topic):
-    if not truthy(os.getenv("PRODIGI_ENABLED", "")):
-        return False, "disabled"
-
-    if "paid" not in str(source_topic or "").casefold() and not truthy(os.getenv("PRODIGI_SEND_ON_NON_PAID", "")):
+def should_queue_for_local_print(details, source_topic):
+    if "paid" not in str(source_topic or "").casefold():
         return False, "waiting_for_paid_webhook"
 
     delivery_key = str(details.get("postcard_delivery_key", "") or "").casefold()
@@ -4356,111 +4429,181 @@ def should_send_to_prodigi(details, source_topic):
     if not str(details.get("rendered_back_image_url", "") or "").strip():
         return False, "missing_print_back_image_url"
 
-    if not os.getenv("PRODIGI_API_KEY", "").strip() or not os.getenv("PRODIGI_POSTCARD_SKU", "").strip():
-        return False, "missing_prodigi_config"
-
     return True, "ready"
 
 
-def submit_prodigi_order(details, payload, postcard_url, source_topic=""):
-    should_send, reason = should_send_to_prodigi(details, source_topic)
-    if not should_send:
-        print(
-            "Prodigi skipped:",
-            json.dumps(
-                {
-                    "reason": reason,
-                    "order_id": details.get("order_id", ""),
-                    "order_name": details.get("order_name", ""),
-                    "delivery_key": details.get("postcard_delivery_key", ""),
-                    "print_ready": details.get("print_ready", ""),
-                    "has_front": bool(str(details.get("print_front_image_url", "") or "").strip()),
-                    "has_back": bool(str(details.get("rendered_back_image_url", "") or "").strip()),
-                },
-                ensure_ascii=False,
-            ),
-        )
-        return {"sent": False, "reason": reason}
-
-    api_base = os.getenv("PRODIGI_API_BASE", "https://api.sandbox.prodigi.com").strip().rstrip("/")
-    api_url = f"{api_base}/v4.0/Orders"
-    api_key = os.getenv("PRODIGI_API_KEY", "").strip()
-    payload_data = build_prodigi_payload(details, payload, postcard_url)
-    request_body = json.dumps(payload_data).encode("utf-8")
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "X-API-Key": api_key,
-    }
-
-    req = urllib.request.Request(api_url, data=request_body, headers=headers, method="POST")
-
-    try:
-        print(
-            "Prodigi submit:",
-            json.dumps(
-                {
-                    "order_id": details.get("order_id", ""),
-                    "order_name": details.get("order_name", ""),
-                    "sku": (payload_data.get("items") or [{}])[0].get("sku", ""),
-                    "asset_print_areas": [
-                        asset.get("printArea", "")
-                        for asset in (payload_data.get("items") or [{}])[0].get("assets", [])
-                    ],
-                },
-                ensure_ascii=False,
-            ),
-        )
-        with urllib.request.urlopen(req, timeout=20) as response:
-            response_text = response.read().decode("utf-8", errors="replace")
-            return {
-                "sent": True,
-                "status_code": response.status,
-                "response": response_text[:4000],
-            }
-    except urllib.error.HTTPError as error:
-        response_text = error.read().decode("utf-8", errors="replace")
-        return {
-            "sent": False,
-            "reason": "prodigi_http_error",
-            "status_code": error.code,
-            "response": response_text[:4000],
-        }
-    except Exception as error:
-        return {
-            "sent": False,
-            "reason": "prodigi_request_failed",
-            "response": str(error),
-        }
-
-
-def update_prodigi_status(order_id, result):
-    order_id_candidates = build_order_id_candidates(order_id)
-    if not order_id_candidates:
-        return
+def enqueue_local_print_order(details, postcard_url, source_topic=""):
+    should_queue, reason = should_queue_for_local_print(details, source_topic)
+    if not should_queue:
+        return {"queued": False, "reason": reason}
 
     db = get_db()
-    placeholders = ", ".join("?" for _ in order_id_candidates)
+    existing = db.execute(
+        "SELECT * FROM local_print_queue WHERE order_id = ? LIMIT 1",
+        (details.get("order_id", ""),),
+    ).fetchone()
+    if existing:
+        return {
+            "queued": True,
+            "already_queued": True,
+            "queue_id": existing["id"],
+            "status": existing["status"],
+            "print_url": existing["combined_print_url"],
+        }
+
+    combined_print_url = create_combined_print_ready_file(
+        str(details.get("print_front_image_url") or "").strip(),
+        str(details.get("rendered_back_image_url") or "").strip(),
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
     db.execute(
-        f"""
-        UPDATE postcards
-        SET prodigi_status = ?,
-            prodigi_response = ?
-        WHERE id = (
-            SELECT id
-            FROM postcards
-            WHERE order_id IN ({placeholders})
-            ORDER BY id DESC
-            LIMIT 1
-        )
+        """
+        INSERT INTO local_print_queue (
+            created_at, order_id, order_name, postcard_url, combined_print_url, status
+        ) VALUES (?, ?, ?, ?, ?, 'waiting')
+        ON CONFLICT(order_id) DO NOTHING
         """,
-        [
-            "sent" if result.get("sent") else str(result.get("reason", "not_sent")),
-            json.dumps(result, ensure_ascii=False)[:4000],
-            *order_id_candidates,
-        ],
+        (
+            created_at,
+            details.get("order_id", ""),
+            details.get("order_name", ""),
+            postcard_url,
+            combined_print_url,
+        ),
     )
     db.commit()
+    queued = db.execute(
+        "SELECT * FROM local_print_queue WHERE order_id = ? LIMIT 1",
+        (details.get("order_id", ""),),
+    ).fetchone()
+    result = {
+        "queued": True,
+        "already_queued": False,
+        "queue_id": queued["id"],
+        "status": queued["status"],
+        "print_url": queued["combined_print_url"],
+    }
+    waiting_count = db.execute(
+        "SELECT COUNT(*) AS count FROM local_print_queue WHERE status = 'waiting'"
+    ).fetchone()["count"]
+    result["waiting_count"] = waiting_count
+    if waiting_count >= 8:
+        result["generated_batch"] = generate_local_print_batch(8)
+        result["notification"] = notify_local_print_batch_ready(result["generated_batch"])
+    return result
+
+
+def load_remote_rgb_image(url):
+    response = requests.get(url, timeout=45)
+    response.raise_for_status()
+    return Image.open(io.BytesIO(response.content)).convert("RGB")
+
+
+def mm_to_px(value):
+    return round(float(value) * 300 / 25.4)
+
+
+def draw_local_print_sheet(items, use_front):
+    page = Image.new("RGB", (mm_to_px(450), mm_to_px(320)), "white")
+    draw = ImageDraw.Draw(page)
+    card_w, card_h = mm_to_px(109), mm_to_px(152)
+    gap_x, gap_y = mm_to_px(2), mm_to_px(2)
+    grid_w = card_w * 4 + gap_x * 3
+    grid_h = card_h * 2 + gap_y
+    origin_x = (page.width - grid_w) // 2
+    origin_y = (page.height - grid_h) // 2
+    mark = mm_to_px(2)
+
+    for index, item in enumerate(items):
+        row, column = divmod(index, 4)
+        target_column = column if use_front else 3 - column
+        x = origin_x + target_column * (card_w + gap_x)
+        y = origin_y + row * (card_h + gap_y)
+        spread = load_remote_rgb_image(item["combined_print_url"])
+        side_w = spread.width // 2
+        box = (side_w, 0, spread.width, spread.height) if use_front else (0, 0, side_w, spread.height)
+        side = spread.crop(box).transpose(Image.Transpose.ROTATE_270)
+        side = side.resize((card_w, card_h), Image.Resampling.LANCZOS)
+        page.paste(side, (x, y))
+
+        label = f"{item['order_name'] or item['order_id']} / S{index + 1} / {'FRONT' if use_front else 'BACK'}"
+        label_y = max(2, y - 14)
+        draw.text((x + 4, label_y), label, fill=(50, 50, 50))
+        for edge_x, direction in ((x, -1), (x + card_w, 1)):
+            draw.line((edge_x, y, edge_x + direction * mark, y), fill=(30, 30, 30), width=1)
+            draw.line((edge_x, y + card_h, edge_x + direction * mark, y + card_h), fill=(30, 30, 30), width=1)
+        for edge_y, direction in ((y, -1), (y + card_h, 1)):
+            draw.line((x, edge_y, x, edge_y + direction * mark), fill=(30, 30, 30), width=1)
+            draw.line((x + card_w, edge_y, x + card_w, edge_y + direction * mark), fill=(30, 30, 30), width=1)
+
+    draw.text((origin_x, 4), f"{'FRONT' if use_front else 'BACK'} / TOP", fill=(20, 20, 20))
+    return page
+
+
+def generate_local_print_batch(limit=8):
+    limit = max(1, min(int(limit or 8), 8))
+    db = get_db()
+    items = db.execute(
+        "SELECT * FROM local_print_queue WHERE status = 'waiting' ORDER BY id ASC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    if not items:
+        raise ValueError("No waiting postcards are available for a local print batch.")
+
+    front_page = draw_local_print_sheet(items, use_front=True)
+    back_page = draw_local_print_sheet(items, use_front=False)
+    pdf_buffer = io.BytesIO()
+    front_page.save(
+        pdf_buffer,
+        format="PDF",
+        resolution=300,
+        save_all=True,
+        append_images=[back_page],
+    )
+    pdf_buffer.seek(0)
+    pdf_url = upload_file_to_storage(
+        pdf_buffer,
+        "local-print-sra3-batch.pdf",
+        "application/pdf",
+        "postcards/local-print-batches",
+    )
+    created_at = datetime.now(timezone.utc).isoformat()
+    batch_code = f"SRA3-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2).upper()}"
+    if USE_POSTGRES:
+        batch_id = db.execute(
+            """
+            INSERT INTO local_print_batches (created_at, batch_code, item_count, pdf_url, status)
+            VALUES (?, ?, ?, ?, 'generated')
+            RETURNING id
+            """,
+            (created_at, batch_code, len(items), pdf_url),
+        ).fetchone()["id"]
+    else:
+        cursor = db.execute(
+            """
+            INSERT INTO local_print_batches (created_at, batch_code, item_count, pdf_url, status)
+            VALUES (?, ?, ?, ?, 'generated')
+            """,
+            (created_at, batch_code, len(items), pdf_url),
+        )
+        batch_id = cursor.lastrowid
+
+    for slot_number, item in enumerate(items, start=1):
+        db.execute(
+            """
+            UPDATE local_print_queue
+            SET status = 'batched', batch_id = ?, slot_number = ?
+            WHERE id = ?
+            """,
+            (batch_id, slot_number, item["id"]),
+        )
+    db.commit()
+    return {
+        "batch_id": batch_id,
+        "batch_code": batch_code,
+        "item_count": len(items),
+        "pdf_url": pdf_url,
+    }
 
 
 def log_webhook_debug_event(topic, payload, details):
@@ -4799,7 +4942,8 @@ def upload_generated_asset():
         "postcards/backs",
         "postcards/backs-rendered",
         "postcards/backgrounds",
-        "postcards/prodigi-print-files",
+        "postcards/print-ready-files",
+        "postcards/local-print-batches",
         "postcards/uploads",
     }
     if folder not in allowed_folders:
@@ -4861,15 +5005,8 @@ def process_shopify_order_payload(payload, source_topic="", log_debug=False):
 
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
-    prodigi_result = submit_prodigi_order(details, payload, postcard_url, source_topic)
-   
-    print(
-    "Prodigi result:",
-    json.dumps(prodigi_result, ensure_ascii=False),
-    flush=True,
-    )
-
-    update_prodigi_status(details["order_id"], prodigi_result)
+    fulfilment_result = enqueue_local_print_order(details, postcard_url, source_topic)
+    print("Local print result:", json.dumps(fulfilment_result, ensure_ascii=False), flush=True)
 
     return {
         "ok": True,
@@ -4877,7 +5014,8 @@ def process_shopify_order_payload(payload, source_topic="", log_debug=False):
         "url": postcard_url,
         "topic": source_topic,
         "order_id": details["order_id"],
-        "prodigi": prodigi_result,
+        "fulfilment_mode": "local",
+        "fulfilment": fulfilment_result,
     }
 
 
@@ -5159,6 +5297,84 @@ def debug_webhooks():
             for row in rows
         ],
     }), 200
+
+
+@app.route("/admin/local-print", methods=["GET", "POST"])
+def local_print_admin():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    generated_batch = None
+    error = ""
+    if request.method == "POST":
+        try:
+            generated_batch = generate_local_print_batch(request.form.get("limit", "8"))
+        except Exception as exc:
+            error = str(exc)
+
+    db = get_db()
+    waiting = db.execute(
+        "SELECT * FROM local_print_queue WHERE status = 'waiting' ORDER BY id ASC"
+    ).fetchall()
+    batches = db.execute(
+        "SELECT * FROM local_print_batches ORDER BY id DESC LIMIT 30"
+    ).fetchall()
+    password = str(request.args.get("password", "") or "")
+    return render_template_string(
+        """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local print batches</title>
+  <style>
+    body{margin:0;padding:24px;background:#f7f1e8;color:#2f2923;font:15px Arial,sans-serif}
+    main{max-width:1080px;margin:auto}.panel{margin:0 0 18px;padding:18px;border:1px solid #decdb7;border-radius:16px;background:#fffdf9}
+    h1,h2{margin:0 0 12px}p{line-height:1.5}.grid{display:grid;gap:10px}.row{padding:12px;border:1px solid #eadfce;border-radius:12px;background:#fff}
+    a{color:#805b2d;font-weight:700}.button{display:inline-block;padding:11px 16px;border:0;border-radius:10px;background:#4a2f1f;color:#fff;cursor:pointer;font-weight:700}
+    input{width:64px;padding:10px;border:1px solid #decdb7;border-radius:8px}.ok{color:#287445}.error{color:#a22626}
+  </style>
+</head>
+<body>
+<main>
+  <section class="panel">
+    <h1>Local SRA3 print queue</h1>
+    <p><strong>{{ waiting|length }} waiting</strong>. Generate up to 8 postcards as a two-page SRA3 duplex PDF.</p>
+    {% if generated_batch %}<p class="ok">Generated {{ generated_batch.batch_code }}: <a href="{{ generated_batch.pdf_url }}">download PDF</a></p>{% endif %}
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/local-print?password={{ password }}">
+      <label>Cards in batch <input name="limit" type="number" min="1" max="8" value="{{ 8 if waiting|length >= 8 else waiting|length or 1 }}"></label>
+      <button class="button" type="submit">Generate SRA3 PDF</button>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Waiting postcards</h2>
+    <div class="grid">
+      {% for item in waiting %}
+      <div class="row"><strong>{{ item.order_name or item.order_id }}</strong> · {{ item.created_at }} · <a href="{{ item.combined_print_url }}">print-ready JPG</a> · <a href="{{ item.postcard_url }}">postcard</a></div>
+      {% else %}<p>No postcards are waiting.</p>{% endfor %}
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Generated batches</h2>
+    <div class="grid">
+      {% for batch in batches %}
+      <div class="row"><strong>{{ batch.batch_code }}</strong> · {{ batch.item_count }} cards · {{ batch.created_at }} · <a href="{{ batch.pdf_url }}">download PDF</a></div>
+      {% else %}<p>No batches generated yet.</p>{% endfor %}
+    </div>
+  </section>
+</main>
+</body>
+</html>
+        """,
+        waiting=waiting,
+        batches=batches,
+        generated_batch=generated_batch,
+        error=error,
+        password=password,
+    )
 
 
 @app.route("/latest")
