@@ -5,6 +5,7 @@ import secrets
 import sqlite3
 import urllib.parse
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from textwrap import wrap
 import re
 import unicodedata
@@ -5521,6 +5522,22 @@ def redirect_to_local_print_admin():
     return redirect(f"/admin/local-print?password={password}")
 
 
+def format_local_print_datetime(value):
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        try:
+            local_timezone = ZoneInfo("Europe/Zagreb")
+        except ZoneInfoNotFoundError:
+            local_timezone = timezone(timedelta(hours=2))
+        return parsed.astimezone(local_timezone).strftime("%d.%m.%Y. %H:%M")
+    except (ValueError, TypeError):
+        return str(value)
+
+
 @app.route("/admin/local-print/batch/<int:batch_id>/packing-list")
 def local_print_batch_packing_list(batch_id):
     auth_response = require_admin_links_password()
@@ -5626,10 +5643,18 @@ def local_print_admin():
     for row in waiting_rows:
         item = dict(row)
         item["missing_fields"] = get_local_print_missing_fields(row)
+        item["created_at_display"] = format_local_print_datetime(row["created_at"])
         waiting.append(item)
-    batches = db.execute(
+    batch_rows = db.execute(
         "SELECT * FROM local_print_batches ORDER BY id DESC LIMIT 30"
     ).fetchall()
+    batches = []
+    for row in batch_rows:
+        batch = dict(row)
+        batch["created_at_display"] = format_local_print_datetime(row["created_at"])
+        batch["printed_at_display"] = format_local_print_datetime(row["printed_at"])
+        batch["shipped_at_display"] = format_local_print_datetime(row["shipped_at"])
+        batches.append(batch)
     batch_items = {}
     for item in db.execute(
         "SELECT * FROM local_print_queue WHERE batch_id IS NOT NULL ORDER BY batch_id DESC, slot_number ASC"
@@ -5690,7 +5715,7 @@ def local_print_admin():
       {% for item in waiting %}
       <article class="card">
         <div class="card-head"><strong>{{ item.order_name or item.order_id }}</strong>{% if item.missing_fields %}<span class="badge badge--warn">needs details</span>{% else %}<span class="badge badge--ok">ready</span>{% endif %}</div>
-        <div class="meta">Added: {{ item.created_at }}</div>
+        <div class="meta">Added: {{ item.created_at_display }}</div>
         {% if item.missing_fields %}<div class="error">Missing: {{ item.missing_fields|join(', ') }}</div>{% endif %}
         <div class="address"><strong>{{ item.recipient_name or 'Recipient not saved' }}</strong><br>{{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %}<br>{{ item.postal_code }} {{ item.city }}{% if item.country %}, {{ item.country }}{% endif %}</div>
         {% if item.delivery_method %}<div class="meta">Delivery: {{ item.delivery_method }}</div>{% endif %}
@@ -5711,9 +5736,9 @@ def local_print_admin():
             {% elif batch.status == 'test' %}<span class="badge">test PDF</span>
             {% else %}<span class="badge">ready to print</span>{% endif %}
           </div>
-          <div class="meta">{{ batch.item_count }} postcards | Generated {{ batch.created_at }}</div>
-          {% if batch.printed_at %}<div class="meta">Printed: {{ batch.printed_at }}</div>{% endif %}
-          {% if batch.shipped_at %}<div class="meta">Shipped: {{ batch.shipped_at }}{% if batch.tracking_number %} | Tracking: {{ batch.tracking_number }}{% endif %}</div>{% endif %}
+          <div class="meta">{{ batch.item_count }} postcards | Generated {{ batch.created_at_display }}</div>
+          {% if batch.printed_at %}<div class="meta">Printed: {{ batch.printed_at_display }}</div>{% endif %}
+          {% if batch.shipped_at %}<div class="meta">Shipped: {{ batch.shipped_at_display }}{% if batch.tracking_number %} | Tracking: {{ batch.tracking_number }}{% endif %}</div>{% endif %}
         </div>
         <div class="batch-actions">
           <a class="download" href="{{ batch.pdf_url }}" target="_blank">Download PDF</a>
