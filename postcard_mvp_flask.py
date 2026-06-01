@@ -4217,7 +4217,7 @@ def truthy(value) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "y", "ready"}
 
 
-def send_local_print_ready_email(batch):
+def send_smtp_message(subject, body):
     recipient = os.getenv("LOCAL_PRINT_NOTIFICATION_EMAIL", "").strip()
     smtp_host = os.getenv("SMTP_HOST", "").strip()
     smtp_username = os.getenv("SMTP_USERNAME", "").strip()
@@ -4229,20 +4229,10 @@ def send_local_print_ready_email(batch):
         return {"sent": False, "reason": "missing_email_config"}
 
     message = EmailMessage()
-    message["Subject"] = f"Send A Memory: SRA3 print PDF ready ({batch['batch_code']})"
+    message["Subject"] = subject
     message["From"] = smtp_from
     message["To"] = recipient
-    message.set_content(
-        "\n".join(
-            [
-                f"SRA3 duplex print PDF is ready for {batch['item_count']} postcards.",
-                "",
-                f"Download PDF: {batch['pdf_url']}",
-                "",
-                f"Open admin: {PUBLIC_POSTCARD_BASE_URL}/admin/local-print",
-            ]
-        )
-    )
+    message.set_content(body)
 
     if truthy(os.getenv("SMTP_USE_SSL", "true")):
         with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20) as smtp:
@@ -4258,6 +4248,34 @@ def send_local_print_ready_email(batch):
             smtp.send_message(message)
 
     return {"sent": True, "recipient": recipient}
+
+
+def send_local_print_ready_email(batch):
+    return send_smtp_message(
+        f"Send A Memory: SRA3 print PDF ready ({batch['batch_code']})",
+        "\n".join(
+            [
+                f"SRA3 duplex print PDF is ready for {batch['item_count']} postcards.",
+                "",
+                f"Download PDF: {batch['pdf_url']}",
+                "",
+                f"Open admin: {PUBLIC_POSTCARD_BASE_URL}/admin/local-print",
+            ]
+        ),
+    )
+
+
+def send_local_print_test_email():
+    return send_smtp_message(
+        "Send A Memory: SMTP test successful",
+        "\n".join(
+            [
+                "SMTP email delivery from Railway is working.",
+                "",
+                f"Open local print admin: {PUBLIC_POSTCARD_BASE_URL}/admin/local-print",
+            ]
+        ),
+    )
 
 
 def notify_local_print_batch_ready(batch):
@@ -5348,6 +5366,9 @@ def local_print_admin():
       <label>Cards in batch <input name="limit" type="number" min="1" max="8" value="{{ 8 if waiting|length >= 8 else waiting|length or 1 }}"></label>
       <button class="button" type="submit">Generate SRA3 PDF</button>
     </form>
+    <form method="post" action="/admin/local-print/test-email?password={{ password }}" style="margin-top:10px">
+      <button class="button" type="submit">Send test email</button>
+    </form>
   </section>
   <section class="panel">
     <h2>Waiting postcards</h2>
@@ -5375,6 +5396,21 @@ def local_print_admin():
         error=error,
         password=password,
     )
+
+
+@app.route("/admin/local-print/test-email", methods=["POST"])
+def local_print_test_email():
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    try:
+        result = send_local_print_test_email()
+        status_code = 200 if result.get("sent") else 500
+        return jsonify(result), status_code
+    except Exception as exc:
+        print(f"Local print SMTP test failed: {exc}", flush=True)
+        return jsonify({"sent": False, "reason": "email_failed", "error": str(exc)}), 500
 
 
 @app.route("/latest")
