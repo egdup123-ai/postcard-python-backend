@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, g, make_response
+from flask import Flask, request, jsonify, render_template_string, g, make_response, redirect
 import json
 import os
 import secrets
@@ -9,6 +9,7 @@ from textwrap import wrap
 import re
 import unicodedata
 import io
+import csv
 import smtplib
 import time
 import requests
@@ -3050,7 +3051,14 @@ def ensure_postgres_db():
             combined_print_url TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'waiting',
             batch_id BIGINT,
-            slot_number INTEGER
+            slot_number INTEGER,
+            recipient_name TEXT NOT NULL DEFAULT '',
+            address_line1 TEXT NOT NULL DEFAULT '',
+            address_line2 TEXT NOT NULL DEFAULT '',
+            city TEXT NOT NULL DEFAULT '',
+            postal_code TEXT NOT NULL DEFAULT '',
+            country TEXT NOT NULL DEFAULT '',
+            delivery_method TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -3062,10 +3070,30 @@ def ensure_postgres_db():
             batch_code TEXT UNIQUE NOT NULL,
             item_count INTEGER NOT NULL DEFAULT 0,
             pdf_url TEXT NOT NULL DEFAULT '',
-            status TEXT NOT NULL DEFAULT 'generated'
+            status TEXT NOT NULL DEFAULT 'generated',
+            printed_at TEXT NOT NULL DEFAULT '',
+            shipped_at TEXT NOT NULL DEFAULT '',
+            tracking_number TEXT NOT NULL DEFAULT ''
         )
         """
     )
+    queue_columns = {
+        "recipient_name": "TEXT NOT NULL DEFAULT ''", "address_line1": "TEXT NOT NULL DEFAULT ''",
+        "address_line2": "TEXT NOT NULL DEFAULT ''", "city": "TEXT NOT NULL DEFAULT ''",
+        "postal_code": "TEXT NOT NULL DEFAULT ''", "country": "TEXT NOT NULL DEFAULT ''",
+        "delivery_method": "TEXT NOT NULL DEFAULT ''",
+    }
+    batch_columns = {
+        "printed_at": "TEXT NOT NULL DEFAULT ''",
+        "shipped_at": "TEXT NOT NULL DEFAULT ''", "tracking_number": "TEXT NOT NULL DEFAULT ''",
+    }
+    for table_name, columns in (("local_print_queue", queue_columns), ("local_print_batches", batch_columns)):
+        existing = {row["column_name"] for row in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %s", (table_name,)
+        ).fetchall()}
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS local_print_notifications (
@@ -3191,7 +3219,14 @@ def ensure_db():
             combined_print_url TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'waiting',
             batch_id INTEGER,
-            slot_number INTEGER
+            slot_number INTEGER,
+            recipient_name TEXT NOT NULL DEFAULT '',
+            address_line1 TEXT NOT NULL DEFAULT '',
+            address_line2 TEXT NOT NULL DEFAULT '',
+            city TEXT NOT NULL DEFAULT '',
+            postal_code TEXT NOT NULL DEFAULT '',
+            country TEXT NOT NULL DEFAULT '',
+            delivery_method TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -3203,10 +3238,28 @@ def ensure_db():
             batch_code TEXT UNIQUE NOT NULL,
             item_count INTEGER NOT NULL DEFAULT 0,
             pdf_url TEXT NOT NULL DEFAULT '',
-            status TEXT NOT NULL DEFAULT 'generated'
+            status TEXT NOT NULL DEFAULT 'generated',
+            printed_at TEXT NOT NULL DEFAULT '',
+            shipped_at TEXT NOT NULL DEFAULT '',
+            tracking_number TEXT NOT NULL DEFAULT ''
         )
         """
     )
+    queue_columns = {
+        "recipient_name": "TEXT NOT NULL DEFAULT ''", "address_line1": "TEXT NOT NULL DEFAULT ''",
+        "address_line2": "TEXT NOT NULL DEFAULT ''", "city": "TEXT NOT NULL DEFAULT ''",
+        "postal_code": "TEXT NOT NULL DEFAULT ''", "country": "TEXT NOT NULL DEFAULT ''",
+        "delivery_method": "TEXT NOT NULL DEFAULT ''",
+    }
+    batch_columns = {
+        "printed_at": "TEXT NOT NULL DEFAULT ''",
+        "shipped_at": "TEXT NOT NULL DEFAULT ''", "tracking_number": "TEXT NOT NULL DEFAULT ''",
+    }
+    for table_name, columns in (("local_print_queue", queue_columns), ("local_print_batches", batch_columns)):
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        for column_name, column_type in columns.items():
+            if column_name not in existing:
+                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS local_print_notifications (
@@ -4279,6 +4332,9 @@ def send_local_print_test_email():
 
 
 def notify_local_print_batch_ready(batch):
+    if not truthy(os.getenv("LOCAL_PRINT_EMAIL_ENABLED", "")):
+        return {"sent": False, "reason": "disabled"}
+
     db = get_db()
     notification_key = f"local-print-batch:{batch['batch_code']}"
     existing = db.execute(
@@ -4450,7 +4506,56 @@ def should_queue_for_local_print(details, source_topic):
     return True, "ready"
 
 
-def enqueue_local_print_order(details, postcard_url, source_topic=""):
+def extract_shipping_details(payload, details=None):
+    payload = payload or {}
+    details = details or {}
+    address = payload.get("shipping_address") or payload.get("shippingAddress") or {}
+    first_name = str(address.get("first_name") or address.get("firstName") or "").strip()
+    last_name = str(address.get("last_name") or address.get("lastName") or "").strip()
+    recipient_name = str(address.get("name") or " ".join(filter(None, (first_name, last_name)))).strip()
+    shipping_lines = payload.get("shipping_lines") or payload.get("shippingLines") or []
+    shipping_line = shipping_lines[0] if shipping_lines else {}
+    delivery_method = str(
+        shipping_line.get("title")
+        or shipping_line.get("code")
+        or details.get("postcard_delivery_type")
+        or ""
+    ).strip()
+    return {
+        "recipient_name": recipient_name,
+        "address_line1": str(address.get("address1") or address.get("address_1") or "").strip(),
+        "address_line2": str(address.get("address2") or address.get("address_2") or "").strip(),
+        "city": str(address.get("city") or "").strip(),
+        "postal_code": str(address.get("zip") or address.get("postal_code") or "").strip(),
+        "country": str(address.get("country") or address.get("country_name") or address.get("countryCode") or "").strip(),
+        "delivery_method": delivery_method,
+    }
+
+
+def get_local_print_missing_fields(item):
+    required = (
+        ("combined_print_url", "print-ready JPG"),
+        ("recipient_name", "recipient name"),
+        ("address_line1", "street address"),
+        ("city", "city"),
+        ("postal_code", "postal code"),
+        ("country", "country"),
+    )
+    return [label for key, label in required if not str(item[key] or "").strip()]
+
+
+def validate_local_print_items(items):
+    errors = []
+    for item in items:
+        missing = get_local_print_missing_fields(item)
+        if missing:
+            order_label = item["order_name"] or item["order_id"] or f"queue #{item['id']}"
+            errors.append(f"{order_label}: missing {', '.join(missing)}")
+    if errors:
+        raise ValueError("Batch cannot be generated until these details are fixed: " + "; ".join(errors))
+
+
+def enqueue_local_print_order(details, postcard_url, source_topic="", payload=None):
     should_queue, reason = should_queue_for_local_print(details, source_topic)
     if not should_queue:
         return {"queued": False, "reason": reason}
@@ -4473,12 +4578,15 @@ def enqueue_local_print_order(details, postcard_url, source_topic=""):
         str(details.get("print_front_image_url") or "").strip(),
         str(details.get("rendered_back_image_url") or "").strip(),
     )
+    shipping = extract_shipping_details(payload, details)
     created_at = datetime.now(timezone.utc).isoformat()
     db.execute(
         """
         INSERT INTO local_print_queue (
-            created_at, order_id, order_name, postcard_url, combined_print_url, status
-        ) VALUES (?, ?, ?, ?, ?, 'waiting')
+            created_at, order_id, order_name, postcard_url, combined_print_url, status,
+            recipient_name, address_line1, address_line2, city, postal_code, country,
+            delivery_method
+        ) VALUES (?, ?, ?, ?, ?, 'waiting', ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(order_id) DO NOTHING
         """,
         (
@@ -4487,6 +4595,13 @@ def enqueue_local_print_order(details, postcard_url, source_topic=""):
             details.get("order_name", ""),
             postcard_url,
             combined_print_url,
+            shipping["recipient_name"],
+            shipping["address_line1"],
+            shipping["address_line2"],
+            shipping["city"],
+            shipping["postal_code"],
+            shipping["country"],
+            shipping["delivery_method"],
         ),
     )
     db.commit()
@@ -4506,8 +4621,11 @@ def enqueue_local_print_order(details, postcard_url, source_topic=""):
     ).fetchone()["count"]
     result["waiting_count"] = waiting_count
     if waiting_count >= 8:
-        result["generated_batch"] = generate_local_print_batch(8)
-        result["notification"] = notify_local_print_batch_ready(result["generated_batch"])
+        try:
+            result["generated_batch"] = generate_local_print_batch(8)
+            result["notification"] = notify_local_print_batch_ready(result["generated_batch"])
+        except Exception as exc:
+            result["batch_error"] = str(exc)
     return result
 
 
@@ -4558,16 +4676,8 @@ def draw_local_print_sheet(items, use_front):
     return page
 
 
-def generate_local_print_batch(limit=8):
-    limit = max(1, min(int(limit or 8), 8))
-    db = get_db()
-    items = db.execute(
-        "SELECT * FROM local_print_queue WHERE status = 'waiting' ORDER BY id ASC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    if not items:
-        raise ValueError("No waiting postcards are available for a local print batch.")
-
+def create_local_print_pdf(items):
+    validate_local_print_items(items)
     front_page = draw_local_print_sheet(items, use_front=True)
     back_page = draw_local_print_sheet(items, use_front=False)
     pdf_buffer = io.BytesIO()
@@ -4579,12 +4689,62 @@ def generate_local_print_batch(limit=8):
         append_images=[back_page],
     )
     pdf_buffer.seek(0)
-    pdf_url = upload_file_to_storage(
+    return upload_file_to_storage(
         pdf_buffer,
         "local-print-sra3-batch.pdf",
         "application/pdf",
         "postcards/local-print-batches",
     )
+
+
+def create_local_print_packing_csv(items):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "Slot",
+            "Order",
+            "Recipient",
+            "Address line 1",
+            "Address line 2",
+            "Postal code",
+            "City",
+            "Country",
+            "Delivery method",
+            "Postcard URL",
+            "Print-ready JPG",
+        ]
+    )
+    for index, item in enumerate(items, start=1):
+        writer.writerow(
+            [
+                item["slot_number"] or index,
+                item["order_name"] or item["order_id"],
+                item["recipient_name"],
+                item["address_line1"],
+                item["address_line2"],
+                item["postal_code"],
+                item["city"],
+                item["country"],
+                item["delivery_method"],
+                item["postcard_url"],
+                item["combined_print_url"],
+            ]
+        )
+    return "\ufeff" + output.getvalue()
+
+
+def generate_local_print_batch(limit=8):
+    limit = max(1, min(int(limit or 8), 8))
+    db = get_db()
+    items = db.execute(
+        "SELECT * FROM local_print_queue WHERE status = 'waiting' ORDER BY id ASC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    if not items:
+        raise ValueError("No waiting postcards are available for a local print batch.")
+
+    pdf_url = create_local_print_pdf(items)
     created_at = datetime.now(timezone.utc).isoformat()
     batch_code = f"SRA3-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2).upper()}"
     if USE_POSTGRES:
@@ -5062,7 +5222,7 @@ def process_shopify_order_payload(payload, source_topic="", log_debug=False):
 
     slug = insert_postcard(details, assets)
     postcard_url = build_postcard_url(slug)
-    fulfilment_result = enqueue_local_print_order(details, postcard_url, source_topic)
+    fulfilment_result = enqueue_local_print_order(details, postcard_url, source_topic, payload)
     print("Local print result:", json.dumps(fulfilment_result, ensure_ascii=False), flush=True)
 
     return {
@@ -5356,6 +5516,94 @@ def debug_webhooks():
     }), 200
 
 
+def redirect_to_local_print_admin():
+    password = urllib.parse.quote(str(request.args.get("password", "") or ""))
+    return redirect(f"/admin/local-print?password={password}")
+
+
+@app.route("/admin/local-print/batch/<int:batch_id>/packing-list")
+def local_print_batch_packing_list(batch_id):
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    db = get_db()
+    batch = db.execute(
+        "SELECT * FROM local_print_batches WHERE id = ? LIMIT 1",
+        (batch_id,),
+    ).fetchone()
+    items = db.execute(
+        "SELECT * FROM local_print_queue WHERE batch_id = ? ORDER BY slot_number ASC",
+        (batch_id,),
+    ).fetchall()
+    if not batch or not items:
+        return "Packing list is not available for this batch.", 404
+
+    response = make_response(create_local_print_packing_csv(items))
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = f'attachment; filename="{batch["batch_code"]}-packing-list.csv"'
+    return response
+
+
+@app.route("/admin/local-print/batch/<int:batch_id>/reprint", methods=["POST"])
+def local_print_batch_reprint(batch_id):
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    db = get_db()
+    items = db.execute(
+        "SELECT * FROM local_print_queue WHERE batch_id = ? ORDER BY slot_number ASC",
+        (batch_id,),
+    ).fetchall()
+    if not items:
+        return "This batch does not contain archived postcards.", 404
+
+    pdf_url = create_local_print_pdf(items)
+    db.execute(
+        """
+        UPDATE local_print_batches
+        SET pdf_url = ?, status = 'generated', printed_at = '', shipped_at = '', tracking_number = ''
+        WHERE id = ?
+        """,
+        (pdf_url, batch_id),
+    )
+    db.commit()
+    return redirect_to_local_print_admin()
+
+
+@app.route("/admin/local-print/batch/<int:batch_id>/status", methods=["POST"])
+def local_print_batch_status(batch_id):
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    status = str(request.form.get("status", "") or "").strip().casefold()
+    if status not in {"printed", "shipped"}:
+        return "Invalid print batch status.", 400
+
+    now = datetime.now(timezone.utc).isoformat()
+    tracking_number = str(request.form.get("tracking_number", "") or "").strip()
+    db = get_db()
+    if status == "printed":
+        db.execute(
+            "UPDATE local_print_batches SET status = 'printed', printed_at = ? WHERE id = ?",
+            (now, batch_id),
+        )
+    else:
+        db.execute(
+            """
+            UPDATE local_print_batches
+            SET status = 'shipped', printed_at = CASE WHEN printed_at = '' THEN ? ELSE printed_at END,
+                shipped_at = ?, tracking_number = ?
+            WHERE id = ?
+            """,
+            (now, now, tracking_number, batch_id),
+        )
+    db.commit()
+    return redirect_to_local_print_admin()
+
+
 @app.route("/admin/local-print", methods=["GET", "POST"])
 def local_print_admin():
     auth_response = require_admin_links_password()
@@ -5371,12 +5619,22 @@ def local_print_admin():
             error = str(exc)
 
     db = get_db()
-    waiting = db.execute(
+    waiting_rows = db.execute(
         "SELECT * FROM local_print_queue WHERE status = 'waiting' ORDER BY id ASC"
     ).fetchall()
+    waiting = []
+    for row in waiting_rows:
+        item = dict(row)
+        item["missing_fields"] = get_local_print_missing_fields(row)
+        waiting.append(item)
     batches = db.execute(
         "SELECT * FROM local_print_batches ORDER BY id DESC LIMIT 30"
     ).fetchall()
+    batch_items = {}
+    for item in db.execute(
+        "SELECT * FROM local_print_queue WHERE batch_id IS NOT NULL ORDER BY batch_id DESC, slot_number ASC"
+    ).fetchall():
+        batch_items.setdefault(item["batch_id"], []).append(item)
     password = str(request.args.get("password", "") or "")
     return render_template_string(
         """
@@ -5398,8 +5656,9 @@ def local_print_admin():
     .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid #7a5232;border-radius:11px;background:linear-gradient(135deg,#302117,var(--brown));color:#fff;text-decoration:none;cursor:pointer;font-weight:800}
     input{width:70px;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit}.ok,.error{padding:11px 13px;border-radius:10px}.ok{background:#eaf7ee;color:var(--green)}.error{background:#fff0ed;color:var(--red)}
     .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{display:grid;gap:9px;padding:14px;border:1px solid #eee2d3;border-radius:14px;background:#fff}.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .badge{padding:5px 8px;border-radius:999px;background:#f7ecdc;color:#8c6839;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.meta{color:var(--muted);font-size:12px;line-height:1.45;word-break:break-word}.links{display:flex;gap:8px;flex-wrap:wrap}.links a{color:#805b2d;font-size:13px;font-weight:800;text-decoration:none}.links a:hover{text-decoration:underline}
+    .badge{padding:5px 8px;border-radius:999px;background:#f7ecdc;color:#8c6839;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.badge--ok{background:#e8f6ec;color:var(--green)}.badge--warn{background:#fff0ed;color:var(--red)}.badge--shipped{background:#e8f1ff;color:#255898}.meta{color:var(--muted);font-size:12px;line-height:1.45;word-break:break-word}.address{font-size:13px;line-height:1.5}.links{display:flex;gap:8px;flex-wrap:wrap}.links a{color:#805b2d;font-size:13px;font-weight:800;text-decoration:none}.links a:hover{text-decoration:underline}
     .empty{padding:18px;border:1px dashed #ddcdb7;border-radius:12px;color:var(--muted);text-align:center}.batch{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px;border-bottom:1px solid #eee2d3}.batch:last-child{border-bottom:0}.download{display:inline-flex;align-items:center;min-height:38px;padding:0 12px;border-radius:9px;background:#fff3df;color:#6d4826;font-size:13px;font-weight:800;text-decoration:none}
+    .batch-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.small-button{min-height:36px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:#6d4826;font:inherit;font-size:12px;font-weight:800;cursor:pointer}.tracking{width:142px;padding:8px;font-size:12px}.batch-details{grid-column:1/-1}.batch-details summary{color:#805b2d;cursor:pointer;font-size:13px;font-weight:800}.batch-items{display:grid;gap:7px;margin-top:10px}.batch-item{padding:10px;border-radius:10px;background:#fbf6ee;font-size:12px;line-height:1.5}
     @media(max-width:680px){body{padding:16px 10px 30px}.panel{padding:15px;border-radius:16px}.hero{grid-template-columns:1fr}.counter{width:102px;height:102px}.cards{grid-template-columns:1fr}.batch{grid-template-columns:1fr}.button{width:100%}}
   </style>
 </head>
@@ -5430,8 +5689,11 @@ def local_print_admin():
     <div class="cards">
       {% for item in waiting %}
       <article class="card">
-        <div class="card-head"><strong>{{ item.order_name or item.order_id }}</strong><span class="badge">waiting</span></div>
+        <div class="card-head"><strong>{{ item.order_name or item.order_id }}</strong>{% if item.missing_fields %}<span class="badge badge--warn">needs details</span>{% else %}<span class="badge badge--ok">ready</span>{% endif %}</div>
         <div class="meta">Added: {{ item.created_at }}</div>
+        {% if item.missing_fields %}<div class="error">Missing: {{ item.missing_fields|join(', ') }}</div>{% endif %}
+        <div class="address"><strong>{{ item.recipient_name or 'Recipient not saved' }}</strong><br>{{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %}<br>{{ item.postal_code }} {{ item.city }}{% if item.country %}, {{ item.country }}{% endif %}</div>
+        {% if item.delivery_method %}<div class="meta">Delivery: {{ item.delivery_method }}</div>{% endif %}
         <div class="links"><a href="{{ item.combined_print_url }}" target="_blank">Open print-ready JPG</a><a href="{{ item.postcard_url }}" target="_blank">Open postcard</a></div>
       </article>
       {% else %}<p class="empty">No postcards are currently waiting for print.</p>{% endfor %}
@@ -5441,7 +5703,37 @@ def local_print_admin():
     <h2>Generated SRA3 batches</h2>
     <div>
       {% for batch in batches %}
-      <div class="batch"><div><strong>{{ batch.batch_code }}</strong><div class="meta">{{ batch.item_count }} postcards | Generated {{ batch.created_at }}</div></div><a class="download" href="{{ batch.pdf_url }}" target="_blank">Download PDF</a></div>
+      <div class="batch">
+        <div>
+          <div class="card-head"><strong>{{ batch.batch_code }}</strong>
+            {% if batch.status == 'shipped' %}<span class="badge badge--shipped">shipped</span>
+            {% elif batch.status == 'printed' %}<span class="badge badge--ok">printed</span>
+            {% elif batch.status == 'test' %}<span class="badge">test PDF</span>
+            {% else %}<span class="badge">ready to print</span>{% endif %}
+          </div>
+          <div class="meta">{{ batch.item_count }} postcards | Generated {{ batch.created_at }}</div>
+          {% if batch.printed_at %}<div class="meta">Printed: {{ batch.printed_at }}</div>{% endif %}
+          {% if batch.shipped_at %}<div class="meta">Shipped: {{ batch.shipped_at }}{% if batch.tracking_number %} | Tracking: {{ batch.tracking_number }}{% endif %}</div>{% endif %}
+        </div>
+        <div class="batch-actions">
+          <a class="download" href="{{ batch.pdf_url }}" target="_blank">Download PDF</a>
+          {% if batch_items.get(batch.id) %}
+          <a class="download" href="/admin/local-print/batch/{{ batch.id }}/packing-list?password={{ password }}">Packing list</a>
+          <form method="post" action="/admin/local-print/batch/{{ batch.id }}/reprint?password={{ password }}"><button class="small-button" type="submit">Reprint PDF</button></form>
+          {% if batch.status != 'printed' and batch.status != 'shipped' %}
+          <form method="post" action="/admin/local-print/batch/{{ batch.id }}/status?password={{ password }}"><input type="hidden" name="status" value="printed"><button class="small-button" type="submit">Mark printed</button></form>
+          {% endif %}
+          {% if batch.status != 'shipped' %}
+          <form class="actions" method="post" action="/admin/local-print/batch/{{ batch.id }}/status?password={{ password }}"><input type="hidden" name="status" value="shipped"><input class="tracking" name="tracking_number" placeholder="Tracking (optional)"><button class="small-button" type="submit">Mark shipped</button></form>
+          {% endif %}
+          {% endif %}
+        </div>
+        {% if batch_items.get(batch.id) %}
+        <details class="batch-details"><summary>Show {{ batch.item_count }} postcards in this batch</summary><div class="batch-items">
+          {% for item in batch_items.get(batch.id) %}<div class="batch-item"><strong>Slot {{ item.slot_number }} | {{ item.order_name or item.order_id }}</strong><br>{{ item.recipient_name }} | {{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %} | {{ item.postal_code }} {{ item.city }}, {{ item.country }}</div>{% endfor %}
+        </div></details>
+        {% endif %}
+      </div>
       {% else %}<p class="empty">No SRA3 batches have been generated yet.</p>{% endfor %}
     </div>
   </section>
@@ -5451,6 +5743,7 @@ def local_print_admin():
         """,
         waiting=waiting,
         batches=batches,
+        batch_items=batch_items,
         generated_batch=generated_batch,
         error=error,
         password=password,
