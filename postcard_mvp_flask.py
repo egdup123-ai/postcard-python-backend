@@ -4432,6 +4432,7 @@ LOCAL_PRINT_DPI = 300
 LOCAL_PRINT_TRIM_WIDTH_MM = 148
 LOCAL_PRINT_TRIM_HEIGHT_MM = 105
 LOCAL_PRINT_BLEED_MM = 3
+LOCAL_PRINT_TARGET_GAP_MM = 2
 LOCAL_PRINT_FORMAT_VERSION = "a6-3mm-bleed-v1"
 
 
@@ -4661,40 +4662,50 @@ def draw_local_print_sheet(items, use_front):
     trim_w = mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM)
     trim_h = mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM)
     bleed = mm_to_px(LOCAL_PRINT_BLEED_MM)
-    grid_w = card_w * 4
-    grid_h = card_h * 2
+    target_gap = mm_to_px(LOCAL_PRINT_TARGET_GAP_MM)
+    gap_x = max(0, min(target_gap, (page.width - card_w * 4) // 3))
+    gap_y = target_gap
+    grid_w = card_w * 4 + gap_x * 3
+    grid_h = card_h * 2 + gap_y
     origin_x = (page.width - grid_w) // 2
     origin_y = (page.height - grid_h) // 2
-    mark = mm_to_px(2)
-    trim_x_positions = set()
-    trim_y_positions = set()
+
+    def draw_card_crop_marks(x, y):
+        left = x + bleed
+        right = x + bleed + trim_w
+        top = y + bleed
+        bottom = y + bleed + trim_h
+        draw.line((left, y + 2, left, top - 2), fill=(30, 30, 30), width=1)
+        draw.line((right, y + 2, right, top - 2), fill=(30, 30, 30), width=1)
+        draw.line((left, bottom + 2, left, y + card_h - 2), fill=(30, 30, 30), width=1)
+        draw.line((right, bottom + 2, right, y + card_h - 2), fill=(30, 30, 30), width=1)
+        draw.line((x + 2, top, left - 2, top), fill=(30, 30, 30), width=1)
+        draw.line((right + 2, top, x + card_w - 2, top), fill=(30, 30, 30), width=1)
+        draw.line((x + 2, bottom, left - 2, bottom), fill=(30, 30, 30), width=1)
+        draw.line((right + 2, bottom, x + card_w - 2, bottom), fill=(30, 30, 30), width=1)
 
     for index, item in enumerate(items):
         row, column = divmod(index, 4)
         target_column = column if use_front else 3 - column
-        x = origin_x + target_column * card_w
-        y = origin_y + row * card_h
+        x = origin_x + target_column * (card_w + gap_x)
+        y = origin_y + row * (card_h + gap_y)
         spread = load_remote_rgb_image(item["combined_print_url"])
         side_w = spread.width // 2
         box = (side_w, 0, spread.width, spread.height) if use_front else (0, 0, side_w, spread.height)
         side = spread.crop(box).transpose(Image.Transpose.ROTATE_270)
         side = side.resize((card_w, card_h), Image.Resampling.LANCZOS)
         page.paste(side, (x, y))
-
-        trim_x_positions.update((x + bleed, x + bleed + trim_w))
-        trim_y_positions.update((y + bleed, y + bleed + trim_h))
+        draw_card_crop_marks(x, y)
         label = f"{item['order_name'] or item['order_id']} / S{index + 1} / {'FRONT' if use_front else 'BACK'}"
         label_y = max(2, origin_y - 14) if row == 0 else min(page.height - 12, origin_y + grid_h + 2)
+        draw.rectangle((x, label_y - 2, min(x + mm_to_px(54), page.width - 1), label_y + 12), fill="white")
         draw.text((x + 4, label_y), label, fill=(50, 50, 50))
 
-    for trim_x in trim_x_positions:
-        draw.line((trim_x, origin_y - mark, trim_x, origin_y - 1), fill=(30, 30, 30), width=1)
-        draw.line((trim_x, origin_y + grid_h + 1, trim_x, origin_y + grid_h + mark), fill=(30, 30, 30), width=1)
-    for trim_y in trim_y_positions:
-        draw.line((origin_x - mark, trim_y, origin_x - 1, trim_y), fill=(30, 30, 30), width=1)
-        draw.line((origin_x + grid_w + 1, trim_y, origin_x + grid_w + mark, trim_y), fill=(30, 30, 30), width=1)
-
-    draw.text((4, 4), f"{'FRONT' if use_front else 'BACK'} / TOP / A6 + 3 mm BLEED", fill=(20, 20, 20))
+    draw.text(
+        (4, 4),
+        f"{'FRONT' if use_front else 'BACK'} / TOP / A6 + 3 mm BLEED / BATCH 1 STYLE",
+        fill=(20, 20, 20),
+    )
     return page
 
 
