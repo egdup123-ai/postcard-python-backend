@@ -4460,15 +4460,7 @@ def create_combined_print_ready_file(front_url, back_url):
     )
 
     def prepare_print_side(image):
-        scale = max(target_size[0] / image.width, target_size[1] / image.height)
-        artwork_size = (
-            max(1, round(image.width * scale)),
-            max(1, round(image.height * scale)),
-        )
-        artwork = image.resize(artwork_size, Image.Resampling.LANCZOS)
-        left = max(0, (artwork.width - target_size[0]) // 2)
-        top = max(0, (artwork.height - target_size[1]) // 2)
-        return artwork.crop((left, top, left + target_size[0], top + target_size[1]))
+        return image.resize(target_size, Image.Resampling.LANCZOS)
 
     back = prepare_print_side(back)
     front = prepare_print_side(front)
