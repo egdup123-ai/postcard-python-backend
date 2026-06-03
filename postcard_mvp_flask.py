@@ -4696,10 +4696,6 @@ def draw_local_print_sheet(items, use_front):
         side = side.resize((card_w, card_h), Image.Resampling.LANCZOS)
         page.paste(side, (x, y))
         draw_card_crop_marks(x, y)
-        label = f"{item['order_name'] or item['order_id']} / S{index + 1} / {'FRONT' if use_front else 'BACK'}"
-        label_y = max(2, origin_y - 14) if row == 0 else min(page.height - 12, origin_y + grid_h + 2)
-        draw.rectangle((x, label_y - 2, min(x + mm_to_px(54), page.width - 1), label_y + 12), fill="white")
-        draw.text((x + 4, label_y), label, fill=(50, 50, 50))
 
     draw.text(
         (4, 4),
