@@ -757,76 +757,6 @@ VIEW_HTML = r"""
       transform: translateX(-50%) translateY(0) scale(1);
     }
 
-    .arrival-copy {
-      position: relative;
-      z-index: 2;
-      width: min(92vw, 720px);
-      margin: 76px auto 10px;
-      display: grid;
-      justify-items: center;
-      gap: 8px;
-      text-align: center;
-      opacity: 0;
-      filter: blur(10px);
-      transform: translateY(18px);
-      transition:
-        opacity 1s ease,
-        filter 1s ease,
-        transform 1.25s var(--ease);
-      pointer-events: none;
-    }
-
-    .arrival-kicker {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      color: rgba(139, 108, 63, 0.78);
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.24em;
-      text-transform: uppercase;
-    }
-
-    .arrival-kicker::before,
-    .arrival-kicker::after {
-      content: "";
-      width: clamp(24px, 5vw, 58px);
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(172, 137, 83, 0.66));
-    }
-
-    .arrival-kicker::after {
-      transform: scaleX(-1);
-    }
-
-    .arrival-title {
-      max-width: 14ch;
-      margin: 0;
-      color: rgba(64, 44, 30, 0.96);
-      font-family: "Cormorant Garamond", Georgia, serif;
-      font-size: clamp(30px, 4.4vw, 58px);
-      line-height: 0.96;
-      letter-spacing: -0.045em;
-      text-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.82),
-        0 18px 44px rgba(91, 68, 41, 0.12);
-    }
-
-    .arrival-subtitle {
-      margin: 0;
-      color: rgba(100, 83, 64, 0.72);
-      font-size: 13px;
-      line-height: 1.5;
-      letter-spacing: 0.02em;
-    }
-
-    body.reveal-active .arrival-copy,
-    body.is-ready .arrival-copy {
-      opacity: 1;
-      filter: blur(0);
-      transform: translateY(0);
-    }
-
     .scene-layout {
       position: relative;
       width: min(100%, 1280px);
@@ -834,7 +764,7 @@ VIEW_HTML = r"""
       grid-template-columns: minmax(112px, 132px) minmax(0, 1fr) minmax(112px, 132px);
       gap: clamp(12px, 2vw, 24px);
       align-items: center;
-      margin-top: 12px;
+      margin-top: 34px;
     }
 
     .story-stop {
@@ -2059,44 +1989,23 @@ VIEW_HTML = r"""
 
       .experience {
         min-height: 100svh;
-        padding: 12px 10px max(24px, env(safe-area-inset-bottom));
+        padding: 12px 10px 56px;
       }
 
       .scene-layout {
-        width: min(94vw, 860px);
+        width: min(92vw, 860px);
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
           "from to"
           "scene scene";
-        gap: 10px 12px;
-        margin-top: 10px;
+        gap: 12px;
+        margin-top: 70px;
       }
 
       .brand-mark {
         top: 10px;
         min-width: min(56vw, 220px);
         padding: 10px 14px;
-      }
-
-      .arrival-copy {
-        width: min(92vw, 620px);
-        margin-top: 68px;
-        margin-bottom: 8px;
-        gap: 6px;
-      }
-
-      .arrival-kicker {
-        font-size: 8px;
-        letter-spacing: 0.2em;
-      }
-
-      .arrival-title {
-        max-width: 13ch;
-        font-size: clamp(24px, 8vw, 40px);
-      }
-
-      .arrival-subtitle {
-        font-size: 11px;
       }
 
       .story-stop {
@@ -2137,21 +2046,21 @@ VIEW_HTML = r"""
 
       .scene {
         grid-area: scene;
-        width: min(94vw, calc((100svh - 218px) * var(--postcard-ratio-number)), 620px);
+        width: min(92vw, calc((100svh - 220px) * var(--postcard-ratio-number)), 620px);
       }
 
       .controls {
-        position: sticky;
-        left: auto;
-        bottom: max(10px, env(safe-area-inset-bottom));
-        width: min(94vw, 430px);
-        margin-top: 12px;
-        transform: translateY(8px);
-        padding: 8px;
+        width: min(92vw, 420px);
+      }
+
+      .controls {
+        position: static;
+        transform: none;
+        margin-top: 10px;
       }
 
       body.is-ready .controls {
-        transform: translateY(0);
+        transform: none;
       }
 
       .actions {
@@ -2160,11 +2069,10 @@ VIEW_HTML = r"""
       }
 
       .button {
-        flex: 1 1 0;
-        min-width: 0;
-        padding: 11px 12px;
+        flex: 0 0 auto;
+        padding: 10px 14px;
         font-size: 9px;
-        letter-spacing: 0.14em;
+        letter-spacing: 0.2em;
       }
     }
 
@@ -2178,7 +2086,7 @@ VIEW_HTML = r"""
 
     @media (max-width: 560px) {
       .experience {
-        padding: 10px 8px max(20px, env(safe-area-inset-bottom));
+        padding: 10px 8px 48px;
       }
 
       .brand-mark {
@@ -2193,17 +2101,8 @@ VIEW_HTML = r"""
           "from"
           "scene"
           "to";
-        gap: 9px;
-        margin-top: 8px;
-      }
-
-      .arrival-copy {
-        width: min(94vw, 520px);
-        margin-top: 66px;
-      }
-
-      .arrival-subtitle {
-        display: none;
+        gap: 10px;
+        margin-top: 74px;
       }
 
       .story-stop {
@@ -2224,25 +2123,12 @@ VIEW_HTML = r"""
       }
 
       .scene {
-        width: min(96vw, calc((100svh - 204px) * var(--postcard-ratio-number)), 520px);
+        width: min(96vw, calc((100svh - 205px) * var(--postcard-ratio-number)), 520px);
       }
 
       .controls {
         width: min(96vw, 520px);
-        margin-top: 8px;
-        border-radius: 26px;
-      }
-
-      .actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        width: 100%;
-      }
-
-      .button {
-        min-height: 46px;
-        padding: 0 10px;
-        letter-spacing: 0.1em;
+        margin-top: 6px;
       }
 
       .message-area {
@@ -2271,25 +2157,16 @@ VIEW_HTML = r"""
 
       .scene-layout {
         width: min(90vw, 480px);
-        margin-top: 6px;
-      }
-
-      .arrival-copy {
-        margin-top: 56px;
-        margin-bottom: 4px;
-      }
-
-      .arrival-title {
-        font-size: clamp(22px, 7vw, 34px);
+        margin-top: 62px;
       }
 
       .scene {
-        width: min(90vw, calc((100svh - 186px) * var(--postcard-ratio-number)), 480px);
+        width: min(90vw, calc((100svh - 190px) * var(--postcard-ratio-number)), 480px);
       }
 
       .controls {
         width: min(90vw, 480px);
-        margin-top: 6px;
+        margin-top: 4px;
       }
     }
 
@@ -2365,13 +2242,6 @@ VIEW_HTML = r"""
       <img src="/static/send-a-memory-logo.png" alt="Send a Memory" id="brandLogo">
       <span class="brand-mark-fallback">Send a Memory</span>
     </div>
-
-    <section class="arrival-copy" aria-label="Postcard introduction">
-      <span class="arrival-kicker">A memory has arrived</span>
-      <h1 class="arrival-title">{{ postcard['product_title'] or 'Your postcard' }}</h1>
-      <p class="arrival-subtitle">Sent from {{ sender_name or 'someone special' }} to {{ recipient_name or 'someone special' }}.</p>
-    </section>
-
     <div class="scene-layout">
       <aside class="story-stop story-stop-from" aria-label="Postcard sender">
         <div>
