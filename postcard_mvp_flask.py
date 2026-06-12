@@ -4726,6 +4726,49 @@ def load_remote_rgb_image(url):
     return Image.open(io.BytesIO(response.content)).convert("RGB")
 
 
+def get_local_print_artwork_size_px():
+    box_width_mm = LOCAL_PRINT_CUT_X_MM[1] - LOCAL_PRINT_CUT_X_MM[0]
+    box_height_mm = LOCAL_PRINT_CUT_Y_MM[1] - LOCAL_PRINT_CUT_Y_MM[0]
+    return (
+        mm_to_px(box_width_mm) - mm_to_px(LOCAL_PRINT_ART_INSET_X_MM) * 2,
+        mm_to_px(box_height_mm) - mm_to_px(LOCAL_PRINT_ART_INSET_Y_MM) * 2,
+    )
+
+
+def get_local_print_side_image(item, side):
+    side = str(side or "").strip().casefold()
+    if side not in {"front", "back"}:
+        raise ValueError("Invalid print side.")
+
+    combined_url = str(item["combined_print_url"] or "").strip()
+    if not combined_url:
+        raise ValueError("Missing print-ready JPG.")
+
+    spread = load_remote_rgb_image(combined_url)
+    side_width = spread.width // 2
+    crop_box = (
+        (side_width, 0, spread.width, spread.height)
+        if side == "front"
+        else (0, 0, side_width, spread.height)
+    )
+    return spread.crop(crop_box).resize(get_local_print_artwork_size_px(), Image.Resampling.LANCZOS)
+
+
+def make_local_print_side_jpg_response(item, side):
+    image = get_local_print_side_image(item, side)
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
+    output.seek(0)
+
+    label = str(item["order_name"] or item["order_id"] or f"queue-{item['id']}").strip()
+    safe_label = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-") or f"queue-{item['id']}"
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "image/jpeg"
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_label}-print-{side}.jpg"'
+    response.headers["Cache-Control"] = "private, max-age=300"
+    return response
+
+
 def draw_local_print_sheet(items, use_front):
     page = Image.new(
         "RGB",
@@ -5721,6 +5764,31 @@ def local_print_batch_packing_list(batch_id):
     return response
 
 
+@app.route("/admin/local-print/item/<int:item_id>/side/<side>.jpg")
+def local_print_item_side_jpg(item_id, side):
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    side = str(side or "").strip().casefold()
+    if side not in {"front", "back"}:
+        return "Invalid print side.", 404
+
+    db = get_db()
+    item = db.execute(
+        "SELECT * FROM local_print_queue WHERE id = ? LIMIT 1",
+        (item_id,),
+    ).fetchone()
+    if not item:
+        return "Print item is not available.", 404
+
+    try:
+        return make_local_print_side_jpg_response(item, side)
+    except Exception as exc:
+        print(f"Local print {side} JPG download failed for item {item_id}: {exc}", flush=True)
+        return f"Could not generate print {side} JPG.", 500
+
+
 @app.route("/admin/local-print/batch/<int:batch_id>/reprint", methods=["POST"])
 def local_print_batch_reprint(batch_id):
     auth_response = require_admin_links_password()
@@ -5819,6 +5887,8 @@ def local_print_admin():
         "SELECT * FROM local_print_queue WHERE batch_id IS NOT NULL ORDER BY batch_id DESC, slot_number ASC"
     ).fetchall():
         batch_items.setdefault(item["batch_id"], []).append(item)
+    manual_jpg_width, manual_jpg_height = get_local_print_artwork_size_px()
+    manual_jpg_size = f"{manual_jpg_width} x {manual_jpg_height}px at 300 DPI"
     password = str(request.args.get("password", "") or "")
     return render_template_string(
         """
@@ -5840,10 +5910,10 @@ def local_print_admin():
     .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid #7a5232;border-radius:11px;background:linear-gradient(135deg,#302117,var(--brown));color:#fff;text-decoration:none;cursor:pointer;font-weight:800}
     input{width:70px;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff;font:inherit}.ok,.error{padding:11px 13px;border-radius:10px}.ok{background:#eaf7ee;color:var(--green)}.error{background:#fff0ed;color:var(--red)}
     .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{display:grid;gap:9px;padding:14px;border:1px solid #eee2d3;border-radius:14px;background:#fff}.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .badge{padding:5px 8px;border-radius:999px;background:#f7ecdc;color:#8c6839;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.badge--ok{background:#e8f6ec;color:var(--green)}.badge--warn{background:#fff0ed;color:var(--red)}.badge--shipped{background:#e8f1ff;color:#255898}.meta{color:var(--muted);font-size:12px;line-height:1.45;word-break:break-word}.address{font-size:13px;line-height:1.5}.links{display:flex;gap:8px;flex-wrap:wrap}.links a{color:#805b2d;font-size:13px;font-weight:800;text-decoration:none}.links a:hover{text-decoration:underline}
+    .badge{padding:5px 8px;border-radius:999px;background:#f7ecdc;color:#8c6839;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.badge--ok{background:#e8f6ec;color:var(--green)}.badge--warn{background:#fff0ed;color:var(--red)}.badge--shipped{background:#e8f1ff;color:#255898}.meta{color:var(--muted);font-size:12px;line-height:1.45;word-break:break-word}.address{font-size:13px;line-height:1.5}.links{display:flex;gap:8px;flex-wrap:wrap}.links a{color:#805b2d;font-size:13px;font-weight:800;text-decoration:none}.links a:hover{text-decoration:underline}.asset-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.asset-link{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 10px;border-radius:10px;background:#302117;color:#fff!important;font-size:12px;font-weight:900;text-decoration:none}.asset-link--back{background:#7a5232}
     .empty{padding:18px;border:1px dashed #ddcdb7;border-radius:12px;color:var(--muted);text-align:center}.batch{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px;border-bottom:1px solid #eee2d3}.batch:last-child{border-bottom:0}.download{display:inline-flex;align-items:center;min-height:38px;padding:0 12px;border-radius:9px;background:#fff3df;color:#6d4826;font-size:13px;font-weight:800;text-decoration:none}
     .batch-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.small-button{min-height:36px;padding:0 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:#6d4826;font:inherit;font-size:12px;font-weight:800;cursor:pointer}.tracking{width:142px;padding:8px;font-size:12px}.batch-details{grid-column:1/-1}.batch-details summary{color:#805b2d;cursor:pointer;font-size:13px;font-weight:800}.batch-items{display:grid;gap:7px;margin-top:10px}.batch-item{padding:10px;border-radius:10px;background:#fbf6ee;font-size:12px;line-height:1.5}
-    @media(max-width:680px){body{padding:16px 10px 30px}.panel{padding:15px;border-radius:16px}.hero{grid-template-columns:1fr}.counter{width:102px;height:102px}.cards{grid-template-columns:1fr}.batch{grid-template-columns:1fr}.button{width:100%}}
+    @media(max-width:680px){body{padding:16px 10px 30px}.panel{padding:15px;border-radius:16px}.hero{grid-template-columns:1fr}.counter{width:102px;height:102px}.cards{grid-template-columns:1fr}.batch{grid-template-columns:1fr}.button{width:100%}.asset-links{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -5878,7 +5948,12 @@ def local_print_admin():
         {% if item.missing_fields %}<div class="error">Missing: {{ item.missing_fields|join(', ') }}</div>{% endif %}
         <div class="address"><strong>{{ item.recipient_name or 'Recipient not saved' }}</strong><br>{{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %}<br>{{ item.postal_code }} {{ item.city }}{% if item.country %}, {{ item.country }}{% endif %}</div>
         {% if item.delivery_method %}<div class="meta">Delivery: {{ item.delivery_method }}</div>{% endif %}
-        <div class="links"><a href="{{ item.combined_print_url }}" target="_blank">Open print-ready JPG</a><a href="{{ item.postcard_url }}" target="_blank">Open postcard</a></div>
+        <div class="asset-links">
+          <a class="asset-link" href="/admin/local-print/item/{{ item.id }}/side/front.jpg?password={{ password }}">Download PRINT FRONT JPG</a>
+          <a class="asset-link asset-link--back" href="/admin/local-print/item/{{ item.id }}/side/back.jpg?password={{ password }}">Download PRINT BACK JPG</a>
+        </div>
+        <div class="meta">Manual JPG size for PDF layout: {{ manual_jpg_size }}</div>
+        <div class="links"><a href="{{ item.combined_print_url }}" target="_blank">Open combined print-ready JPG</a><a href="{{ item.postcard_url }}" target="_blank">Open postcard</a></div>
       </article>
       {% else %}<p class="empty">No postcards are currently waiting for print.</p>{% endfor %}
     </div>
@@ -5914,7 +5989,7 @@ def local_print_admin():
         </div>
         {% if batch_items.get(batch.id) %}
         <details class="batch-details"><summary>Show {{ batch.item_count }} postcards in this batch</summary><div class="batch-items">
-          {% for item in batch_items.get(batch.id) %}<div class="batch-item"><strong>Slot {{ item.slot_number }} | {{ item.order_name or item.order_id }}</strong><br>{{ item.recipient_name }} | {{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %} | {{ item.postal_code }} {{ item.city }}, {{ item.country }}</div>{% endfor %}
+          {% for item in batch_items.get(batch.id) %}<div class="batch-item"><strong>Slot {{ item.slot_number }} | {{ item.order_name or item.order_id }}</strong><br>{{ item.recipient_name }} | {{ item.address_line1 }}{% if item.address_line2 %}, {{ item.address_line2 }}{% endif %} | {{ item.postal_code }} {{ item.city }}, {{ item.country }}<div class="links"><a href="/admin/local-print/item/{{ item.id }}/side/front.jpg?password={{ password }}">PRINT FRONT JPG</a><a href="/admin/local-print/item/{{ item.id }}/side/back.jpg?password={{ password }}">PRINT BACK JPG</a><a href="{{ item.combined_print_url }}" target="_blank">Combined JPG</a></div></div>{% endfor %}
         </div></details>
         {% endif %}
       </div>
@@ -5931,6 +6006,7 @@ def local_print_admin():
         generated_batch=generated_batch,
         error=error,
         password=password,
+        manual_jpg_size=manual_jpg_size,
     )
 
 
