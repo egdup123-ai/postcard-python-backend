@@ -15,7 +15,7 @@ import smtplib
 import time
 import requests
 from email.message import EmailMessage
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageStat
 
 try:
     import boto3
@@ -4481,11 +4481,39 @@ def upload_file_to_storage(file_obj, filename, content_type, folder):
 
 
 LOCAL_PRINT_DPI = 300
+LOCAL_PRINT_SHEET_WIDTH_MM = 330
+LOCAL_PRINT_SHEET_HEIGHT_MM = 487
 LOCAL_PRINT_TRIM_WIDTH_MM = 148
 LOCAL_PRINT_TRIM_HEIGHT_MM = 105
 LOCAL_PRINT_BLEED_MM = 3
 LOCAL_PRINT_TARGET_GAP_MM = 2
+LOCAL_PRINT_UNDERLAY_EXTEND_MM = 6
+LOCAL_PRINT_ART_INSET_X_MM = 5.8
+LOCAL_PRINT_ART_INSET_Y_MM = 7.6
 LOCAL_PRINT_FORMAT_VERSION = "a6-3mm-bleed-v1"
+
+LOCAL_PRINT_CUT_X_MM = (15.98, 164.05, 166.06, 314.02)
+LOCAL_PRINT_CUT_Y_MM = (30.48, 135.45, 137.46, 242.44, 244.45, 349.43, 351.44, 456.42)
+LOCAL_PRINT_CARD_BOXES_MM = (
+    (15.98, 30.48, 164.05, 135.45),
+    (166.06, 30.48, 314.02, 135.45),
+    (15.98, 137.46, 164.05, 242.44),
+    (166.06, 137.46, 314.02, 242.44),
+    (15.98, 244.45, 164.05, 349.43),
+    (166.06, 244.45, 314.02, 349.43),
+    (15.98, 351.44, 164.05, 456.42),
+    (166.06, 351.44, 314.02, 456.42),
+)
+LOCAL_PRINT_CROP_MARKS_MM = {
+    "left_x1": 5.4,
+    "left_x2": 12.5,
+    "right_x1": 317.5,
+    "right_x2": 324.5,
+    "top_y1": 19.9,
+    "top_y2": 27.0,
+    "bottom_y1": 459.8,
+    "bottom_y2": 467.1,
+}
 
 
 def mm_to_px(value):
@@ -4699,53 +4727,88 @@ def load_remote_rgb_image(url):
 
 
 def draw_local_print_sheet(items, use_front):
-    page = Image.new("RGB", (mm_to_px(450), mm_to_px(320)), "white")
+    page = Image.new(
+        "RGB",
+        (mm_to_px(LOCAL_PRINT_SHEET_WIDTH_MM), mm_to_px(LOCAL_PRINT_SHEET_HEIGHT_MM)),
+        "white",
+    )
     draw = ImageDraw.Draw(page)
-    card_w = mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM + LOCAL_PRINT_BLEED_MM * 2)
-    card_h = mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM + LOCAL_PRINT_BLEED_MM * 2)
-    trim_w = mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM)
-    trim_h = mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM)
-    bleed = mm_to_px(LOCAL_PRINT_BLEED_MM)
-    target_gap = mm_to_px(LOCAL_PRINT_TARGET_GAP_MM)
-    gap_x = max(0, min(target_gap, (page.width - card_w * 4) // 3))
-    gap_y = target_gap
-    grid_w = card_w * 4 + gap_x * 3
-    grid_h = card_h * 2 + gap_y
-    origin_x = (page.width - grid_w) // 2
-    origin_y = (page.height - grid_h) // 2
+    art_inset_x = mm_to_px(LOCAL_PRINT_ART_INSET_X_MM)
+    art_inset_y = mm_to_px(LOCAL_PRINT_ART_INSET_Y_MM)
 
-    def draw_card_crop_marks(x, y):
-        left = x + bleed
-        right = x + bleed + trim_w
-        top = y + bleed
-        bottom = y + bleed + trim_h
-        draw.line((left, y + 2, left, top - 2), fill=(30, 30, 30), width=1)
-        draw.line((right, y + 2, right, top - 2), fill=(30, 30, 30), width=1)
-        draw.line((left, bottom + 2, left, y + card_h - 2), fill=(30, 30, 30), width=1)
-        draw.line((right, bottom + 2, right, y + card_h - 2), fill=(30, 30, 30), width=1)
-        draw.line((x + 2, top, left - 2, top), fill=(30, 30, 30), width=1)
-        draw.line((right + 2, top, x + card_w - 2, top), fill=(30, 30, 30), width=1)
-        draw.line((x + 2, bottom, left - 2, bottom), fill=(30, 30, 30), width=1)
-        draw.line((right + 2, bottom, x + card_w - 2, bottom), fill=(30, 30, 30), width=1)
+    def px_rect_from_mm(rect):
+        return tuple(mm_to_px(value) for value in rect)
 
+    def expanded_rect(rect, amount_mm):
+        left, top, right, bottom = rect
+        return (
+            max(0, left - amount_mm),
+            max(0, top - amount_mm),
+            min(LOCAL_PRINT_SHEET_WIDTH_MM, right + amount_mm),
+            min(LOCAL_PRINT_SHEET_HEIGHT_MM, bottom + amount_mm),
+        )
+
+    def sample_back_paper_color(side):
+        width, height = side.size
+        sample = side.crop((
+            int(width * 0.62),
+            int(height * 0.18),
+            int(width * 0.94),
+            int(height * 0.82),
+        ))
+        return tuple(int(value) for value in ImageStat.Stat(sample).median)
+
+    placements = []
     for index, item in enumerate(items):
-        row, column = divmod(index, 4)
-        target_column = column if use_front else 3 - column
-        x = origin_x + target_column * (card_w + gap_x)
-        y = origin_y + row * (card_h + gap_y)
+        if index >= len(LOCAL_PRINT_CARD_BOXES_MM):
+            break
+
+        row, column = divmod(index, 2)
+        target_index = row * 2 + (column if use_front else 1 - column)
         spread = load_remote_rgb_image(item["combined_print_url"])
         side_w = spread.width // 2
         box = (side_w, 0, spread.width, spread.height) if use_front else (0, 0, side_w, spread.height)
-        side = spread.crop(box).transpose(Image.Transpose.ROTATE_270)
-        side = side.resize((card_w, card_h), Image.Resampling.LANCZOS)
-        page.paste(side, (x, y))
-        draw_card_crop_marks(x, y)
+        side = spread.crop(box)
+        placements.append({
+            "target_index": target_index,
+            "side": side,
+            "paper_color": None if use_front else sample_back_paper_color(side),
+        })
 
-    draw.text(
-        (4, 4),
-        f"{'FRONT' if use_front else 'BACK'} / TOP / A6 + 3 mm BLEED / BATCH 1 STYLE",
-        fill=(20, 20, 20),
-    )
+    for placement in placements:
+        box = LOCAL_PRINT_CARD_BOXES_MM[placement["target_index"]]
+        patch = expanded_rect(box, LOCAL_PRINT_UNDERLAY_EXTEND_MM)
+        fill = (0, 0, 0) if use_front else (placement["paper_color"] or (226, 198, 151))
+        draw.rectangle(px_rect_from_mm(patch), fill=fill)
+
+    if not use_front:
+        page = page.filter(ImageFilter.GaussianBlur(radius=4))
+        draw = ImageDraw.Draw(page)
+
+    def draw_external_crop_marks():
+        mark = LOCAL_PRINT_CROP_MARKS_MM
+        grey = (130, 130, 130)
+        for y_mm in LOCAL_PRINT_CUT_Y_MM:
+            y = mm_to_px(y_mm)
+            draw.line((mm_to_px(mark["left_x1"]), y, mm_to_px(mark["left_x2"]), y), fill=grey, width=1)
+            draw.line((mm_to_px(mark["right_x1"]), y, mm_to_px(mark["right_x2"]), y), fill=grey, width=1)
+
+        for x_mm in LOCAL_PRINT_CUT_X_MM:
+            x = mm_to_px(x_mm)
+            draw.line((x, mm_to_px(mark["top_y1"]), x, mm_to_px(mark["top_y2"])), fill=grey, width=1)
+            draw.line((x, mm_to_px(mark["bottom_y1"]), x, mm_to_px(mark["bottom_y2"])), fill=grey, width=1)
+
+    for placement in placements:
+        left_mm, top_mm, right_mm, bottom_mm = LOCAL_PRINT_CARD_BOXES_MM[placement["target_index"]]
+        x = mm_to_px(left_mm) + art_inset_x
+        y = mm_to_px(top_mm) + art_inset_y
+        target_w = mm_to_px(right_mm - left_mm) - art_inset_x * 2
+        target_h = mm_to_px(bottom_mm - top_mm) - art_inset_y * 2
+        side = placement["side"].resize((target_w, target_h), Image.Resampling.LANCZOS)
+        page.paste(side, (x, y))
+
+    draw_external_crop_marks()
+
     return page
 
 
@@ -4858,14 +4921,38 @@ def generate_local_print_batch(limit=8):
 
 
 def generate_local_print_test_batch():
-    page_size = (mm_to_px(450), mm_to_px(320))
-    front_page = Image.new("RGB", page_size, "white")
-    back_page = Image.new("RGB", page_size, "white")
-    for page, side in ((front_page, "FRONT"), (back_page, "BACK")):
-        draw = ImageDraw.Draw(page)
-        draw.rectangle((40, 40, page.width - 40, page.height - 40), outline=(184, 139, 76), width=5)
-        draw.text((90, 90), f"SEND A MEMORY / SRA3 TEST / {side}", fill=(47, 41, 35))
-        draw.text((90, 145), "Download test only - not for customer printing", fill=(126, 109, 91))
+    bleed = mm_to_px(LOCAL_PRINT_BLEED_MM)
+    bleed_size = (
+        mm_to_px(LOCAL_PRINT_TRIM_WIDTH_MM + LOCAL_PRINT_BLEED_MM * 2),
+        mm_to_px(LOCAL_PRINT_TRIM_HEIGHT_MM + LOCAL_PRINT_BLEED_MM * 2),
+    )
+    test_items = []
+    for index in range(8):
+        back = Image.new("RGB", bleed_size, (228, 207, 166))
+        front = Image.new("RGB", bleed_size, (194, 219, 229))
+        for image, label, color in ((back, f"BACK {index + 1}", (91, 66, 38)), (front, f"FRONT {index + 1}", (34, 72, 91))):
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((0, 0, image.width - 1, image.height - 1), outline=color, width=18)
+            draw.rectangle((bleed, bleed, image.width - bleed - 1, image.height - bleed - 1), outline=(255, 255, 255), width=5)
+            draw.text((bleed + 40, bleed + 40), label, fill=color)
+
+        spread = Image.new("RGB", (bleed_size[0] * 2, bleed_size[1]), "white")
+        spread.paste(back, (0, 0))
+        spread.paste(front, (bleed_size[0], 0))
+        buffer = io.BytesIO()
+        spread.save(buffer, format="JPEG", quality=95, subsampling=0, dpi=(300, 300))
+        buffer.seek(0)
+        test_items.append({
+            "combined_print_url": upload_file_to_storage(
+                buffer,
+                f"local-print-test-card-{index + 1}.jpg",
+                "image/jpeg",
+                "postcards/local-print-batches",
+            )
+        })
+
+    front_page = draw_local_print_sheet(test_items, use_front=True)
+    back_page = draw_local_print_sheet(test_items, use_front=False)
 
     pdf_buffer = io.BytesIO()
     front_page.save(
