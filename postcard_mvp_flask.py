@@ -2270,7 +2270,7 @@ VIEW_HTML = r"""
               </article>
 
               <article class="face back">
-                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
+                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" referrerpolicy="no-referrer">
                 {% if not hide_message_overlay %}
                 <div
                   class="message-area"
@@ -2315,8 +2315,8 @@ VIEW_HTML = r"""
       <div class="actions">
         <button class="button button-secondary" id="shareButton">Share postcard</button>
         <button class="button button-secondary" id="replayButton">Replay the moment</button>
-        <button class="button button-secondary" id="downloadFrontButton" type="button">Download front</button>
-        <button class="button button-secondary" id="downloadBackButton" type="button">Download back</button>
+        <a class="button button-secondary" id="downloadFrontButton" href="{{ url_for('download_postcard_side_png', slug=postcard['slug'], side='front') }}">Download front</a>
+        <a class="button button-secondary" id="downloadBackButton" href="{{ url_for('download_postcard_side_png', slug=postcard['slug'], side='back') }}">Download back</a>
       </div>
     </div>
   </main>
@@ -4902,6 +4902,68 @@ def make_postcard_print_side_jpg_response(postcard, side):
     return response
 
 
+
+
+POSTCARD_DOWNLOAD_SIZE = (1800, 1200)
+
+
+def fit_image_to_exact_size(image, target_size=POSTCARD_DOWNLOAD_SIZE):
+    """
+    Center-crop and resize an image to the exact requested size.
+    1800x1200 is a true 3:2 postcard image.
+    """
+    image = image.convert("RGB")
+    target_width, target_height = target_size
+    source_width, source_height = image.size
+
+    if source_width <= 0 or source_height <= 0:
+        raise ValueError("Invalid source image size.")
+
+    source_ratio = source_width / source_height
+    target_ratio = target_width / target_height
+
+    if source_ratio > target_ratio:
+        crop_height = source_height
+        crop_width = int(round(crop_height * target_ratio))
+        left = max(0, (source_width - crop_width) // 2)
+        crop_box = (left, 0, left + crop_width, crop_height)
+    else:
+        crop_width = source_width
+        crop_height = int(round(crop_width / target_ratio))
+        top = max(0, (source_height - crop_height) // 2)
+        crop_box = (0, top, crop_width, top + crop_height)
+
+    return image.crop(crop_box).resize(target_size, Image.Resampling.LANCZOS)
+
+
+def make_postcard_download_png_response(postcard, side):
+    side = str(side or "").strip().casefold()
+    if side not in {"front", "back"}:
+        raise ValueError("Invalid download side.")
+
+    if side == "front":
+        image_url = str(postcard["print_front_image_url"] or postcard["front_image_url"] or "").strip()
+    else:
+        image_url = str(postcard["rendered_back_image_url"] or postcard["back_image_url"] or "").strip()
+
+    if not image_url:
+        raise ValueError("Missing postcard image URL.")
+
+    image = fit_image_to_exact_size(load_remote_rgb_image(image_url), POSTCARD_DOWNLOAD_SIZE)
+
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    output.seek(0)
+
+    label = str(postcard["order_name"] or postcard["order_id"] or postcard["slug"] or f"postcard-{postcard['id']}").strip()
+    safe_label = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-") or f"postcard-{postcard['id']}"
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "image/png"
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_label}-{side}-3x2.png"'
+    response.headers["Cache-Control"] = "private, max-age=300"
+    return response
+
+
 def draw_local_print_sheet(items, use_front):
     page = Image.new(
         "RGB",
@@ -5774,6 +5836,25 @@ def view_postcard(slug):
         message_style=message_style,
         hide_message_overlay=bool(rendered_back_image_url),
     )
+
+
+
+@app.route("/p/<slug>/download/<side>.png")
+def download_postcard_side_png(slug, side):
+    db = get_db()
+    postcard = db.execute(
+        "SELECT * FROM postcards WHERE slug = ?",
+        (slug,),
+    ).fetchone()
+
+    if not postcard:
+        return "Razglednica nije pronadena.", 404
+
+    try:
+        return make_postcard_download_png_response(postcard, side)
+    except Exception as exc:
+        print(f"Postcard {side} PNG download failed for {slug}: {exc}", flush=True)
+        return "Download image is not available for this postcard.", 404
 
 
 @app.route("/api/debug/postcards", methods=["GET"])
