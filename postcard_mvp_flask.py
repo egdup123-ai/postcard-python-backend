@@ -2270,7 +2270,7 @@ VIEW_HTML = r"""
               </article>
 
               <article class="face back">
-                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" referrerpolicy="no-referrer">
+                <img src="{{ postcard['back_image_url'] }}" alt="Back image" id="backImage" crossorigin="anonymous" referrerpolicy="no-referrer">
                 {% if not hide_message_overlay %}
                 <div
                   class="message-area"
@@ -2315,16 +2315,21 @@ VIEW_HTML = r"""
       <div class="actions">
         <button class="button button-secondary" id="shareButton">Share postcard</button>
         <button class="button button-secondary" id="replayButton">Replay the moment</button>
+        <button class="button button-secondary" id="downloadFrontButton" type="button">Download front</button>
+        <button class="button button-secondary" id="downloadBackButton" type="button">Download back</button>
       </div>
     </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script>
     const body = document.body;
     const postcard = document.getElementById('postcard');
     const flipButton = document.getElementById('flipButton');
     const replayButton = document.getElementById('replayButton');
     const shareButton = document.getElementById('shareButton');
+    const downloadFrontButton = document.getElementById('downloadFrontButton');
+    const downloadBackButton = document.getElementById('downloadBackButton');
     const messageArea = document.getElementById('messageArea');
     const messageCanvas = document.getElementById('messageCanvas');
     const messageLines = document.getElementById('messageLines');
@@ -2736,6 +2741,89 @@ VIEW_HTML = r"""
       window.prompt('Copy this postcard link', shareUrl);
     }
 
+
+    function safeFilePart(value, fallback) {
+      const text = String(value || fallback || 'postcard')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      return text || fallback || 'postcard';
+    }
+
+    function drawCover(sourceCanvas, outputWidth, outputHeight) {
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = outputWidth;
+      outputCanvas.height = outputHeight;
+      const ctx = outputCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
+
+      const sourceRatio = sourceCanvas.width / sourceCanvas.height;
+      const outputRatio = outputWidth / outputHeight;
+      let sx = 0;
+      let sy = 0;
+      let sw = sourceCanvas.width;
+      let sh = sourceCanvas.height;
+
+      if (sourceRatio > outputRatio) {
+        sw = sourceCanvas.height * outputRatio;
+        sx = (sourceCanvas.width - sw) / 2;
+      } else if (sourceRatio < outputRatio) {
+        sh = sourceCanvas.width / outputRatio;
+        sy = (sourceCanvas.height - sh) / 2;
+      }
+
+      ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+      return outputCanvas;
+    }
+
+    async function downloadPostcardFace(faceSelector, fileSuffix, button) {
+      const face = document.querySelector(faceSelector);
+      if (!face || !window.html2canvas) return;
+
+      const originalText = button ? button.textContent : '';
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Preparing...';
+      }
+
+      try {
+        renderMessageCanvas();
+        await (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve());
+
+        const sourceCanvas = await html2canvas(face, {
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          allowTaint: false,
+          scale: 3,
+          logging: false,
+          width: face.offsetWidth,
+          height: face.offsetHeight,
+          windowWidth: document.documentElement.clientWidth,
+          windowHeight: document.documentElement.clientHeight
+        });
+
+        const outputCanvas = drawCover(sourceCanvas, 1800, 1200); // exact 3:2 ratio
+        const link = document.createElement('a');
+        const productName = safeFilePart({{ postcard['product_title']|tojson }}, 'postcard');
+        link.download = `${productName}-${fileSuffix}-3x2.png`;
+        link.href = outputCanvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (error) {
+        console.error('Download failed', error);
+        alert('Download nije uspio. Provjeri jesu li slike dostupne s CORS dozvolom.');
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      }
+    }
+
     function runReveal() {
       clearIntroTimers();
       setFlipState(false);
@@ -2760,6 +2848,12 @@ VIEW_HTML = r"""
       setFlipState(!flipped);
     }
 
+    if (downloadFrontButton) {
+      downloadFrontButton.addEventListener('click', () => downloadPostcardFace('.face.front', 'front', downloadFrontButton));
+    }
+    if (downloadBackButton) {
+      downloadBackButton.addEventListener('click', () => downloadPostcardFace('.face.back', 'back', downloadBackButton));
+    }
     flipButton.addEventListener('click', toggleFlip);
     replayButton.addEventListener('click', runReveal);
     if (shareButton) {
@@ -2927,6 +3021,16 @@ PREVIEWS_HTML = r"""
       background: rgba(45, 42, 38, 0.06);
       color: var(--ink);
     }
+
+    .button-print-front {
+      background: #2d2a26;
+      color: #fffaf2;
+    }
+
+    .button-print-back {
+      background: #f4dfbf;
+      color: #6b4525;
+    }
   </style>
 </head>
 <body>
@@ -2954,6 +3058,8 @@ PREVIEWS_HTML = r"""
             <div class="actions">
               <a class="button button-primary" href="{{ base_url }}/p/{{ postcard['slug'] }}" target="_blank" rel="noreferrer">Open</a>
               <a class="button button-secondary" href="{{ base_url }}/api/postcard-by-order/{{ postcard['order_id'] }}" target="_blank" rel="noreferrer">JSON</a>
+              <a class="button button-print-front" href="{{ base_url }}/previews/{{ postcard['id'] }}/print/front.jpg?password={{ password }}">Print Front JPG</a>
+              <a class="button button-print-back" href="{{ base_url }}/previews/{{ postcard['id'] }}/print/back.jpg?password={{ password }}">Print Back JPG</a>
             </div>
           </div>
         </article>
@@ -4769,6 +4875,33 @@ def make_local_print_side_jpg_response(item, side):
     return response
 
 
+def make_postcard_print_side_jpg_response(postcard, side):
+    side = str(side or "").strip().casefold()
+    if side not in {"front", "back"}:
+        raise ValueError("Invalid print side.")
+
+    if side == "front":
+        image_url = str(postcard["print_front_image_url"] or postcard["front_image_url"] or "").strip()
+    else:
+        image_url = str(postcard["rendered_back_image_url"] or postcard["back_image_url"] or "").strip()
+
+    if not image_url:
+        raise ValueError("Missing postcard print image URL.")
+
+    image = load_remote_rgb_image(image_url)
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
+    output.seek(0)
+
+    label = str(postcard["order_name"] or postcard["order_id"] or postcard["slug"] or f"postcard-{postcard['id']}").strip()
+    safe_label = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-") or f"postcard-{postcard['id']}"
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "image/jpeg"
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_label}-print-{side}.jpg"'
+    response.headers["Cache-Control"] = "private, max-age=300"
+    return response
+
+
 def draw_local_print_sheet(items, use_front):
     page = Image.new(
         "RGB",
@@ -6064,7 +6197,18 @@ def previews():
     db = get_db()
     postcards = db.execute(
         """
-        SELECT id, order_id, order_name, slug, product_title, to_name, front_image_url, created_at
+        SELECT
+            id,
+            order_id,
+            order_name,
+            slug,
+            product_title,
+            to_name,
+            front_image_url,
+            back_image_url,
+            rendered_back_image_url,
+            print_front_image_url,
+            created_at
         FROM postcards
         ORDER BY id DESC
         """
@@ -6073,7 +6217,30 @@ def previews():
         PREVIEWS_HTML,
         postcards=postcards,
         base_url=request.host_url.rstrip("/"),
+        password=ADMIN_LINKS_PASSWORD,
     )
+
+
+@app.route("/previews/<int:postcard_id>/print/<side>.jpg")
+def preview_print_side_jpg(postcard_id, side):
+    auth_response = require_admin_links_password()
+    if auth_response:
+        return auth_response
+
+    db = get_db()
+    postcard = db.execute(
+        "SELECT * FROM postcards WHERE id = ? LIMIT 1",
+        (postcard_id,),
+    ).fetchone()
+
+    if not postcard:
+        return "Postcard not found.", 404
+
+    try:
+        return make_postcard_print_side_jpg_response(postcard, side)
+    except Exception as exc:
+        print(f"Preview print {side} JPG download failed for postcard {postcard_id}: {exc}", flush=True)
+        return "Print JPG is not available for this postcard.", 404
 
 
 if __name__ == "__main__":
