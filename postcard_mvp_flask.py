@@ -2805,7 +2805,7 @@ VIEW_HTML = r"""
           windowHeight: document.documentElement.clientHeight
         });
 
-        const outputCanvas = drawCover(sourceCanvas, 1800, 1200); // exact 3:2 ratio
+        const outputCanvas = drawCover(sourceCanvas, 3040, 2180);
         const link = document.createElement('a');
         const productName = safeFilePart({{ postcard['product_title']|tojson }}, 'postcard');
         link.download = `${productName}-${fileSuffix}-3x2.png`;
