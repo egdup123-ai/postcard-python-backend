@@ -2808,7 +2808,7 @@ VIEW_HTML = r"""
         const outputCanvas = drawCover(sourceCanvas, 3040, 2180);
         const link = document.createElement('a');
         const productName = safeFilePart({{ postcard['product_title']|tojson }}, 'postcard');
-        link.download = `${productName}-${fileSuffix}-3x2.png`;
+        link.download = `${productName}-${fileSuffix}-152x109.png`;
         link.href = outputCanvas.toDataURL('image/png');
         document.body.appendChild(link);
         link.click();
@@ -4904,13 +4904,13 @@ def make_postcard_print_side_jpg_response(postcard, side):
 
 
 
-POSTCARD_DOWNLOAD_SIZE = (1800, 1200)
+POSTCARD_DOWNLOAD_SIZE = (3040, 2180)
 
 
 def fit_image_to_exact_size(image, target_size=POSTCARD_DOWNLOAD_SIZE):
     """
     Center-crop and resize an image to the exact requested size.
-    1800x1200 is a true 3:2 postcard image.
+    3040x2180 keeps the postcard download at the exact 152:109 ratio.
     """
     image = image.convert("RGB")
     target_width, target_height = target_size
@@ -4959,7 +4959,7 @@ def make_postcard_download_png_response(postcard, side):
     safe_label = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-") or f"postcard-{postcard['id']}"
     response = make_response(output.getvalue())
     response.headers["Content-Type"] = "image/png"
-    response.headers["Content-Disposition"] = f'attachment; filename="{safe_label}-{side}-3x2.png"'
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_label}-{side}-152x109.png"'
     response.headers["Cache-Control"] = "private, max-age=300"
     return response
 
@@ -6327,3 +6327,4 @@ def preview_print_side_jpg(postcard_id, side):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)
+
